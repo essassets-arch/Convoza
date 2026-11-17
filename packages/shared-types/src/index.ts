@@ -141,7 +141,8 @@ export enum HeaderFormat {
 export enum ButtonType {
   QUICK_REPLY = 'QUICK_REPLY',
   URL = 'URL',
-  PHONE_NUMBER = 'PHONE_NUMBER'
+  PHONE_NUMBER = 'PHONE_NUMBER',
+  OTP = 'OTP'
 }
 
 export interface TemplateButton {

@@ -222,7 +222,7 @@ export default function TermsPage() {
                 </h2>
               </div>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                These Terms and Conditions (&ldquo;Agreement&rdquo;) constitute a binding legal contract between CONVOZA Technologies Inc. (&ldquo;CONVOZA&rdquo;) and the business entity registering for or using our services (&ldquo;Customer&rdquo;, &ldquo;Organization&rdquo;, or &ldquo;You&rdquo;).
+                These Terms and Conditions (&ldquo;Agreement&rdquo;) constitute a binding legal contract between Emperor Smart Solutions, operating CONVOZA (&ldquo;CONVOZA&rdquo;), and the business entity registering for or using our services (&ldquo;Customer&rdquo;, &ldquo;Organization&rdquo;, or &ldquo;You&rdquo;).
               </p>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                 CONVOZA grants Customer a worldwide, non-exclusive, non-transferable right during the applicable subscription term to access and utilize the CONVOZA SaaS application, dashboard, shared inbox, campaign dispatch worker, and API endpoints solely for Customer&apos;s internal business operations.

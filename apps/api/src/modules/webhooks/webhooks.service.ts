@@ -52,6 +52,18 @@ export class WebhooksService {
             await this.handleIncomingMessage(metadata, messageObj, val.contacts);
           }
         }
+
+        // 3. Process Template Approval / Status Updates from Meta
+        if (change.field === 'message_template_status_update' && val.message_template_id) {
+          await this.handleTemplateStatusUpdate(String(val.message_template_id), val.event, val.reason);
+        }
+
+        // 4. Process Tech Provider Embedded Signup Account Updates
+        if (change.field === 'account_update') {
+          this.logger.log(
+            `Meta Tech Provider account_update event received: event=${val.event || 'UNKNOWN'}, waba=${val.waba_info?.waba_id || entry.id}`
+          );
+        }
       }
     }
 
@@ -240,6 +252,24 @@ export class WebhooksService {
         messageText: body,
       })
       .catch((err) => this.logger.error(`Automation trigger failed: ${err.message}`));
+  }
+
+  private async handleTemplateStatusUpdate(metaTemplateId: string, event?: string, reason?: string) {
+    const statusUpper = (event || '').toUpperCase();
+    let mappedStatus: 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'PENDING' = 'PENDING';
+    if (statusUpper === 'APPROVED') mappedStatus = 'APPROVED';
+    else if (statusUpper === 'REJECTED') mappedStatus = 'REJECTED';
+    else if (statusUpper === 'PAUSED') mappedStatus = 'PAUSED';
+    else if (statusUpper === 'DISABLED') mappedStatus = 'DISABLED';
+
+    await this.prisma.template.updateMany({
+      where: { metaTemplateId },
+      data: {
+        status: mappedStatus,
+        rejectionReason: reason && reason !== 'NONE' ? reason : null,
+      },
+    });
+    this.logger.log(`Template ${metaTemplateId} status updated via Meta webhook -> ${mappedStatus}`);
   }
 }
 

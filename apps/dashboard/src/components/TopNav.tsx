@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { apiFetch, getWebsiteUrl } from '../lib/api';
 import {
   Building2,
   ChevronDown,
@@ -25,21 +26,57 @@ interface TopNavProps {
 export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [orgName, setOrgName] = useState('Apex Global Retail');
+  const [primaryPhone, setPrimaryPhone] = useState('+91 98765 43210');
+  const [primaryRating, setPrimaryRating] = useState('HIGH Quality (Tier 10K)');
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     try {
+      const token = localStorage.getItem('convoza_access_token');
+      setIsAuthenticated(Boolean(token));
       const storedUser = localStorage.getItem('convoza_user');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
+      }
+      const storedOrgName = localStorage.getItem('convoza_org_name');
+      if (storedOrgName) {
+        setOrgName(storedOrgName);
+      }
+
+      if (token) {
+        apiFetch('/auth/me')
+          .then((me) => {
+            if (me?.name) {
+              setUser({ name: me.name, email: me.email });
+              localStorage.setItem('convoza_user', JSON.stringify({ id: me.id, name: me.name, email: me.email }));
+            }
+            const firstMem = me?.memberships?.[0];
+            if (firstMem?.organization) {
+              setOrgName(firstMem.organization.name);
+              localStorage.setItem('convoza_org_id', firstMem.organization.id);
+              localStorage.setItem('convoza_org_name', firstMem.organization.name);
+            }
+          })
+          .catch(() => {});
+
+        apiFetch<any[]>('/whatsapp/accounts')
+          .then((accounts) => {
+            const firstPhone = accounts?.[0]?.phoneNumbers?.[0];
+            if (firstPhone) {
+              setPrimaryPhone(firstPhone.displayPhoneNumber);
+              setPrimaryRating(`${firstPhone.qualityRating || 'GREEN'} (${firstPhone.messagingLimitTier || 'TIER_1K'})`);
+            }
+          })
+          .catch(() => {});
       }
     } catch {}
   }, []);
 
   const handleLogout = () => {
     localStorage.clear();
-    window.location.href = 'http://localhost:3000/login';
+    window.location.href = '/dashboard/login';
   };
 
   return (
@@ -73,24 +110,33 @@ export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
         {/* Live WABA Number Status */}
         <div className="hidden md:flex items-center gap-2 bg-emerald-50/70 px-3 py-1.5 rounded-xl border border-emerald-200/80 text-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-bold text-emerald-950">+91 98765 43210</span>
+          <span className="font-bold text-emerald-950">{primaryPhone}</span>
           <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded">
-            HIGH Quality (Tier 10K)
+            {primaryRating}
           </span>
         </div>
       </div>
 
       {/* Right Controls: Docs, New Broadcast, Notifications, User Menu */}
       <div className="flex items-center gap-2 sm:gap-3">
-        <Link
-          href="http://localhost:3000"
+        {!isAuthenticated && (
+          <Link
+            href="/dashboard/login"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors"
+          >
+            Sign In
+          </Link>
+        )}
+        <a
+          href={`${getWebsiteUrl()}/api-docs`}
           target="_blank"
+          rel="noreferrer"
           className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-medium px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
         >
           <LifeBuoy className="w-3.5 h-3.5 text-slate-400" />
           <span>API Docs</span>
           <ExternalLink className="w-3 h-3 text-slate-400" />
-        </Link>
+        </a>
 
         {/* Action Button */}
         <Link

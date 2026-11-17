@@ -3,10 +3,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TemplateCategory, TemplateComponent } from '@convoza/shared-types';
 
 export class CreateTemplateDto {
-  @ApiProperty({ example: 'whatsapp_account_uuid' })
+  @ApiPropertyOptional({ example: 'whatsapp_account_uuid' })
   @IsString()
-  @IsNotEmpty()
-  whatsappAccountId!: string;
+  @IsOptional()
+  whatsappAccountId?: string;
+
+  @ApiPropertyOptional({ description: 'Automatically submit to Meta Graph API right after creation' })
+  @IsOptional()
+  submitImmediately?: boolean;
 
   @ApiProperty({ example: 'seasonal_sale_announcement' })
   @IsString()

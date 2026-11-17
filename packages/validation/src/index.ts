@@ -44,7 +44,7 @@ export function validateTemplateName(name: string): ValidationResult<string> {
   if (!name || name.trim().length === 0) {
     errors.push('Template name is required');
   } else {
-    const trimmed = name.trim().toLowerCase();
+    const trimmed = name.trim();
     if (!/^[a-z0-9_]{1,512}$/.test(trimmed)) {
       errors.push('Template name can only contain lowercase letters, numbers, and underscores (max 512 characters).');
     }
@@ -63,7 +63,11 @@ export function validateTemplateComponents(components: any[]): ValidationResult<
     return { isValid: false, errors };
   }
 
-  const hasBody = components.some((c) => c.type === TemplateComponentType.BODY && c.text && c.text.trim().length > 0);
+  const hasBody = components.some(
+    (c) =>
+      c.type === TemplateComponentType.BODY &&
+      ((c.text && c.text.trim().length > 0) || c.add_security_recommendation !== undefined)
+  );
   if (!hasBody) {
     errors.push('Template must have a non-empty BODY component');
   }

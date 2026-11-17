@@ -16,6 +16,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { WhatsAppIcon } from '@convoza/ui';
+import { apiFetch } from '../../../lib/api';
 
 export default function BillingPage() {
   const [currentPlan, setCurrentPlan] = useState({
@@ -46,18 +47,12 @@ export default function BillingPage() {
     setMessage(null);
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/billing/checkout', {
+      await apiFetch('/billing/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('convoza_access_token') || ''}`,
-          'x-organization-id': localStorage.getItem('convoza_org_id') || '',
-        },
         body: JSON.stringify({ planId, interval }),
       });
 
-      const json = await res.json();
-      setMessage('Payment verified successfully via Razorpay signature! Subscription upgraded.');
+      setMessage('Payment order generated via Razorpay! Subscription ready.');
       setShowUpgradeModal(false);
     } catch (err: any) {
       setMessage('Simulated payment verification via Razorpay signature successful! Upgraded to Enterprise Plan.');

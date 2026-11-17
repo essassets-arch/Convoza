@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { WhatsAppIcon } from '../../components/WhatsAppIcon';
+import { getApiBaseUrl, buildDashboardRedirectUrl } from '../../lib/api';
 import {
   ArrowRight,
   AlertCircle,
@@ -59,7 +60,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/auth/register', {
+      const res = await fetch(`${getApiBaseUrl()}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -82,9 +83,16 @@ export default function RegisterPage() {
       localStorage.setItem('convoza_refresh_token', json.data.tokens.refreshToken);
       localStorage.setItem('convoza_user', JSON.stringify(json.data.user));
       localStorage.setItem('convoza_org_id', json.data.organization.id);
+      localStorage.setItem('convoza_org_name', json.data.organization.name);
 
       // Redirect to Dashboard
-      window.location.href = 'http://localhost:3001/dashboard';
+      window.location.href = buildDashboardRedirectUrl({
+        accessToken: json.data.tokens.accessToken,
+        refreshToken: json.data.tokens.refreshToken,
+        user: json.data.user,
+        orgId: json.data.organization.id,
+        orgName: json.data.organization.name,
+      });
     } catch (err: any) {
       setError(err.message || 'Network error connecting to API');
     } finally {

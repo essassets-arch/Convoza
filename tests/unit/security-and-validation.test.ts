@@ -2,6 +2,7 @@ import {
   encryptSecret,
   decryptSecret,
   verifyMetaWebhookSignature,
+  buildMetaMessagePayload,
 } from '../../packages/configuration/src';
 import {
   normalizeE164,
@@ -68,6 +69,36 @@ describe('CONVOZA WhatsApp Business Normalization & Validation', () => {
     const text = 'Hi {{1}}, your order #{{2}} for total {{3}} has shipped!';
     const tokens = extractTemplateVariables(text);
     expect(tokens).toEqual(['{{1}}', '{{2}}', '{{3}}']);
+  });
+
+  it('should build Meta Cloud API v20.0 OTP AUTHENTICATION payload with body and copy-code button parameters', () => {
+    const payload = buildMetaMessagePayload({
+      recipientPhone: '+91 98765 43210',
+      type: 'TEMPLATE',
+      templateName: 'login_otp_verify',
+      templateLanguage: 'en_US',
+      templateCategory: 'AUTHENTICATION',
+      templateComponents: [
+        { type: 'BODY', text: '*{{1}}* is your verification code.' },
+        { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE', text: 'Copy code' }] },
+      ],
+      templateParameters: { '1': '482913' },
+    });
+
+    expect(payload.to).toEqual('919876543210');
+    expect(payload.type).toEqual('template');
+    expect(payload.template.components).toEqual([
+      {
+        type: 'body',
+        parameters: [{ type: 'text', text: '482913' }],
+      },
+      {
+        type: 'button',
+        sub_type: 'url',
+        index: '0',
+        parameters: [{ type: 'text', text: '482913' }],
+      },
+    ]);
   });
 });
 

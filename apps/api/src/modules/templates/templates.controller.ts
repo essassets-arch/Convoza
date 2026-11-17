@@ -87,7 +87,7 @@ export class TemplatesController {
   @ApiOperation({ summary: 'Synchronize templates with Meta Cloud API' })
   async syncTemplates(
     @CurrentOrg() org: any,
-    @Body('whatsappAccountId') whatsappAccountId: string
+    @Body('whatsappAccountId') whatsappAccountId?: string
   ) {
     return this.templatesService.syncTemplates(org.id, whatsappAccountId);
   }

@@ -24,8 +24,10 @@ import {
   Zap,
 } from 'lucide-react';
 import { WhatsAppIcon } from '@convoza/ui';
+import { apiFetch } from '../../lib/api';
 
 export default function DashboardOverviewPage() {
+  const [userName, setUserName] = useState('Alex Vance');
   const [metrics, setMetrics] = useState({
     totalMessages: 128450,
     deliveryRate: 98.6,
@@ -76,6 +78,33 @@ export default function DashboardOverviewPage() {
     },
   ]);
 
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem('convoza_user');
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        if (parsed?.name) setUserName(parsed.name);
+      }
+      const token = localStorage.getItem('convoza_access_token');
+      if (token) {
+        apiFetch('/analytics/dashboard')
+          .then((d) => {
+            if (d && typeof d.totalMessages === 'number') {
+              setMetrics((prev) => ({
+                ...prev,
+                totalMessages: d.totalMessages,
+                deliveryRate: d.rates?.deliveryRate || prev.deliveryRate,
+                readRate: d.rates?.readRate || prev.readRate,
+                replyRate: d.rates?.replyRate || prev.replyRate,
+                activeCampaigns: d.activeCampaigns ?? prev.activeCampaigns,
+              }));
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  }, []);
+
   return (
     <div className="space-y-8 pb-10">
       {/* Hero Welcome Banner */}
@@ -87,7 +116,7 @@ export default function DashboardOverviewPage() {
               OFFICIAL META CLOUD API v20.0 • PRODUCTION READY
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              Welcome back, Alex Vance 👋
+              Welcome back, {userName} 👋
             </h1>
             <p className="text-xs md:text-sm text-slate-300 max-w-xl leading-relaxed">
               Your WhatsApp Business throughput is running at <span className="text-emerald-400 font-bold">98.6% delivery</span>. All webhook listeners and Meta Cloud API token endpoints are healthy.

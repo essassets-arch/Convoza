@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { WhatsAppIcon } from '@convoza/ui';
+import { apiFetch } from '../lib/api';
 import {
   LayoutDashboard,
   Smartphone,
@@ -71,6 +72,28 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
+  const [orgName, setOrgName] = useState('Apex Global Retail');
+  const [phoneDisplay, setPhoneDisplay] = useState('+91 98765 43210');
+  const [phoneTier, setPhoneTier] = useState('Meta Tier 10K (High Quality)');
+
+  useEffect(() => {
+    try {
+      const storedOrg = localStorage.getItem('convoza_org_name');
+      if (storedOrg) setOrgName(storedOrg);
+      const token = localStorage.getItem('convoza_access_token');
+      if (token) {
+        apiFetch<any[]>('/whatsapp/accounts')
+          .then((accounts) => {
+            const p = accounts?.[0]?.phoneNumbers?.[0];
+            if (p) {
+              setPhoneDisplay(p.displayPhoneNumber);
+              setPhoneTier(`Meta ${p.messagingLimitTier || 'TIER_1K'} (${p.qualityRating || 'GREEN'})`);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  }, []);
 
   return (
     <>
@@ -105,8 +128,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
                     Cloud API
                   </span>
                 </div>
-                <span className="block text-[10px] text-slate-400 font-medium tracking-wide">
-                  Apex Global Retail
+                <span className="block text-[10px] text-slate-400 font-medium tracking-wide truncate max-w-[140px]">
+                  {orgName}
                 </span>
               </div>
             </Link>
@@ -176,8 +199,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <div className="leading-none">
-                <span className="text-[11px] font-bold text-slate-200 block">+91 98765 43210</span>
-                <span className="text-[9px] text-emerald-400 font-medium">Meta Tier 10K (High Quality)</span>
+                <span className="text-[11px] font-bold text-slate-200 block">{phoneDisplay}</span>
+                <span className="text-[9px] text-emerald-400 font-medium">{phoneTier}</span>
               </div>
             </div>
             <ShieldCheck className="w-4 h-4 text-emerald-400" />

@@ -14,6 +14,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { ApiKeysModule } from './modules/api-keys/api-keys.module';
     AdminModule,
     ApiKeysModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
 

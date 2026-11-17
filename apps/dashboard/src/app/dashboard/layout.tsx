@@ -1,15 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from '../../components/Sidebar';
 import { TopNav } from '../../components/TopNav';
+import { consumeAuthHandoffFromHash } from '../../lib/api';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    consumeAuthHandoffFromHash();
+  }, []);
+
+  if (pathname === '/dashboard/login') {
+    return <>{children}</>;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">

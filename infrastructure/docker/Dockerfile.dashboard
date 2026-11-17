@@ -18,6 +18,8 @@ RUN npm run build --workspace=@convoza/validation
 RUN npm run build --workspace=@convoza/ui
 
 WORKDIR /app/apps/dashboard
+ARG NEXT_PUBLIC_ASSET_PREFIX=""
+ENV NEXT_PUBLIC_ASSET_PREFIX=$NEXT_PUBLIC_ASSET_PREFIX
 RUN npm run build
 
 FROM node:20-alpine AS runner

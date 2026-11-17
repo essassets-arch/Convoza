@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileCode2,
   Plus,
@@ -10,19 +10,14 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  ExternalLink,
   Loader2,
-  Smartphone,
-  Eye,
-  Sparkles,
-  HelpCircle,
   ArrowLeft,
-  Copy,
-  Tag,
   Search,
-  Filter,
+  AlertCircle,
+  KeyRound,
 } from 'lucide-react';
 import { WhatsAppChatMockup } from '../../../components/WhatsAppChatMockup';
+import { apiFetch } from '../../../lib/api';
 
 export interface TemplateItem {
   id: string;
@@ -30,11 +25,52 @@ export interface TemplateItem {
   category: string;
   language: string;
   status: string;
+  metaTemplateId?: string;
+  rejectionReason?: string;
   header: { type: 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT'; text: string };
   body: string;
   footer?: string;
-  buttons?: Array<{ type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER'; text: string; url?: string }>;
+  buttons?: Array<{ type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'OTP'; text: string; url?: string }>;
   updatedAt: string;
+}
+
+function mapApiTemplateToUi(tpl: any): TemplateItem {
+  const comps: any[] = Array.isArray(tpl.components) ? tpl.components : [];
+  const headerComp = comps.find((c) => (c.type || '').toUpperCase() === 'HEADER');
+  const bodyComp = comps.find((c) => (c.type || '').toUpperCase() === 'BODY');
+  const footerComp = comps.find((c) => (c.type || '').toUpperCase() === 'FOOTER');
+  const buttonsComp = comps.find((c) => (c.type || '').toUpperCase() === 'BUTTONS');
+
+  const isAuth = (tpl.category || '').toUpperCase() === 'AUTHENTICATION';
+
+  return {
+    id: tpl.id,
+    name: tpl.name,
+    category: tpl.category,
+    language: tpl.language || 'en_US',
+    status: tpl.status,
+    metaTemplateId: tpl.metaTemplateId || undefined,
+    rejectionReason: tpl.rejectionReason || undefined,
+    header: headerComp
+      ? { type: (headerComp.format || 'TEXT').toUpperCase(), text: headerComp.text || '' }
+      : { type: 'NONE', text: '' },
+    body:
+      bodyComp?.text ||
+      (isAuth ? '*{{1}}* is your verification code. For your security, do not share this code.' : ''),
+    footer:
+      footerComp?.text ||
+      (footerComp?.code_expiration_minutes
+        ? `This code expires in ${footerComp.code_expiration_minutes} minutes.`
+        : undefined),
+    buttons: Array.isArray(buttonsComp?.buttons)
+      ? buttonsComp.buttons.map((b: any) => ({
+          type: (b.type || 'QUICK_REPLY').toUpperCase(),
+          text: b.text || 'Copy code',
+          url: b.url,
+        }))
+      : [],
+    updatedAt: tpl.updatedAt ? new Date(tpl.updatedAt).toLocaleString() : 'Recently',
+  };
 }
 
 export default function TemplatesPage() {
@@ -42,71 +78,79 @@ export default function TemplatesPage() {
   const [filterCategory, setFilterCategory] = useState<'ALL' | 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Templates List State
-  const [templates, setTemplates] = useState<TemplateItem[]>([
-    {
-      id: 'tpl-1',
-      name: 'order_confirmation_v1',
-      category: 'UTILITY',
-      language: 'en_US',
-      status: 'APPROVED',
-      header: { type: 'TEXT' as const, text: 'Order Confirmation #{{1}}' },
-      body: 'Hi {{1}}, thank you for shopping with Apex Retail! Your order for {{2}} items has been confirmed and is being prepared for dispatch.',
-      footer: 'Apex Global Retail • High-performance shopping',
-      buttons: [
-        { type: 'URL' as const, text: 'Track Order', url: 'https://apexretail.com/track/{{1}}' },
-        { type: 'QUICK_REPLY' as const, text: 'Speak to Support' },
-      ],
-      updatedAt: '2 hours ago',
-    },
-    {
-      id: 'tpl-2',
-      name: 'weekend_vip_flash_sale',
-      category: 'MARKETING',
-      language: 'en_US',
-      status: 'APPROVED',
-      header: { type: 'TEXT' as const, text: 'Flash Sale: 40% OFF Weekend Deal' },
-      body: 'Hey {{1}}, enjoy exclusive early access to our VIP Flash Sale! Use coupon code {{2}} at checkout for flat 40% off across all categories.',
-      footer: 'Reply STOP to opt out',
-      buttons: [
-        { type: 'URL' as const, text: 'Claim Offer', url: 'https://apexretail.com/vip' },
-      ],
-      updatedAt: 'Yesterday',
-    },
-    {
-      id: 'tpl-3',
-      name: 'abandoned_cart_reminder',
-      category: 'MARKETING',
-      language: 'en_US',
-      status: 'PENDING',
-      header: { type: 'IMAGE' as const, text: '' },
-      body: 'Hi {{1}}, you left items in your cart. Complete your order today and get free express shipping!',
-      footer: 'Reply STOP to unsubscribe',
-      buttons: [{ type: 'URL' as const, text: 'Checkout Now', url: 'https://apexretail.com/cart' }],
-      updatedAt: '3 hours ago',
-    },
-  ]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [selectedWabaId, setSelectedWabaId] = useState<string>('');
+  const [templates, setTemplates] = useState<TemplateItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [submittingTplId, setSubmittingTplId] = useState<string | null>(null);
 
   // Template Builder Form State
-  const [name, setName] = useState('festive_mega_promo_v1');
-  const [category, setCategory] = useState<'MARKETING' | 'UTILITY' | 'AUTHENTICATION'>('MARKETING');
+  const [name, setName] = useState('order_status_update_v1');
+  const [category, setCategory] = useState<'MARKETING' | 'UTILITY' | 'AUTHENTICATION'>('UTILITY');
   const [language, setLanguage] = useState('en_US');
   const [headerType, setHeaderType] = useState<'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT'>('TEXT');
-  const [headerText, setHeaderText] = useState('Exclusive Deal for {{1}}');
-  const [bodyText, setBodyText] = useState('Hi {{1}}, thank you for choosing Apex Retail! Here is your exclusive 40% discount coupon: {{2}}. Valid until midnight.');
-  const [footerText, setFooterText] = useState('Reply STOP to unsubscribe');
-  const [buttons, setButtons] = useState<Array<{ type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER'; text: string; url?: string }>>([
-    { type: 'URL', text: 'Shop Now', url: 'https://apexretail.com/festive' },
-    { type: 'QUICK_REPLY', text: 'Speak with Agent' },
-  ]);
+  const [headerText, setHeaderText] = useState('Order Update #{{1}}');
+  const [bodyText, setBodyText] = useState(
+    'Hello {{1}}, your order #{{2}} has been confirmed and is scheduled for dispatch.'
+  );
+  const [footerText, setFooterText] = useState('Thank you for choosing us');
+  const [buttons, setButtons] = useState<
+    Array<{ type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER'; text: string; url?: string }>
+  >([{ type: 'QUICK_REPLY', text: 'Track Shipment' }]);
 
   const [sampleVariables, setSampleVariables] = useState<Record<string, string>>({
-    '1': 'Sarah',
-    '2': 'VIP40',
+    '1': 'Alex',
+    '2': 'ORD-4912',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [accRes, tplRes] = await Promise.all([
+        apiFetch<any[]>('/whatsapp/accounts').catch(() => []),
+        apiFetch<{ items: any[] }>('/templates?limit=100').catch(() => ({ items: [] })),
+      ]);
+
+      if (Array.isArray(accRes) && accRes.length > 0) {
+        setAccounts(accRes);
+        setSelectedWabaId((prev) => prev || accRes[0].id);
+      }
+
+      const items = tplRes?.items || (Array.isArray(tplRes) ? tplRes : []);
+      setTemplates(items.map(mapApiTemplateToUi));
+    } catch {
+      // Unauthenticated fallback
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSyncFromMeta = async () => {
+    setIsSyncing(true);
+    setMessage(null);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch('/templates/sync', {
+        method: 'POST',
+        body: JSON.stringify(selectedWabaId ? { whatsappAccountId: selectedWabaId } : {}),
+      });
+      await loadData();
+      setMessage(`Synced ${res?.syncedCount ?? 0} template(s) directly from Meta WhatsApp Cloud API!`);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to sync templates from Meta');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const insertVariable = () => {
     const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
@@ -115,90 +159,128 @@ export default function TemplatesPage() {
     setSampleVariables((prev) => ({ ...prev, [String(nextIdx)]: `Sample_${nextIdx}` }));
   };
 
-  const handleCreateTemplate = async () => {
+  const handleCreateTemplate = async (submitImmediately: boolean) => {
     setIsSubmitting(true);
     setMessage(null);
+    setErrorMsg(null);
 
     const components: any[] = [];
-    if (headerType !== 'NONE') {
+
+    if (category === 'AUTHENTICATION') {
       components.push({
-        type: 'HEADER',
-        format: headerType,
-        ...(headerType === 'TEXT' && { text: headerText }),
+        type: 'BODY',
+        add_security_recommendation: true,
       });
-    }
-
-    components.push({
-      type: 'BODY',
-      text: bodyText,
-    });
-
-    if (footerText) {
       components.push({
         type: 'FOOTER',
-        text: footerText,
+        code_expiration_minutes: 10,
       });
-    }
-
-    if (buttons.length > 0) {
       components.push({
         type: 'BUTTONS',
-        buttons,
+        buttons: [{ type: 'OTP', otp_type: 'COPY_CODE', text: 'Copy code' }],
       });
+    } else {
+      if (headerType !== 'NONE') {
+        const headerHasVar = headerType === 'TEXT' && headerText.includes('{{');
+        components.push({
+          type: 'HEADER',
+          format: headerType,
+          ...(headerType === 'TEXT' && {
+            text: headerText,
+            ...(headerHasVar ? { example: { header_text: [sampleVariables['1'] || 'ORD-4912'] } } : {}),
+          }),
+        });
+      }
+
+      const bodyVars = Array.from(new Set(bodyText.match(/\{\{(\d+)\}\}/g) || []));
+      components.push({
+        type: 'BODY',
+        text: bodyText,
+        ...(bodyVars.length > 0
+          ? {
+              example: {
+                body_text: [
+                  bodyVars.map((tok, i) => {
+                    const num = tok.replace(/\D/g, '');
+                    return sampleVariables[num] || `Sample${i + 1}`;
+                  }),
+                ],
+              },
+            }
+          : {}),
+      });
+
+      if (footerText.trim()) {
+        components.push({
+          type: 'FOOTER',
+          text: footerText.trim(),
+        });
+      }
+
+      if (buttons.length > 0) {
+        components.push({
+          type: 'BUTTONS',
+          buttons,
+        });
+      }
     }
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/templates', {
+      const created = await apiFetch('/templates', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('convoza_access_token') || ''}`,
-          'x-organization-id': localStorage.getItem('convoza_org_id') || '',
-        },
         body: JSON.stringify({
-          whatsappAccountId: 'dummy_or_active_acc',
-          name,
+          whatsappAccountId: selectedWabaId || undefined,
+          name: name.trim().toLowerCase(),
           category,
           language,
           components,
+          submitImmediately,
         }),
       });
 
-      const newTpl = {
-        id: `tpl-${Date.now()}`,
-        name,
-        category,
-        language,
-        status: 'PENDING',
-        header: { type: headerType, text: headerText },
-        body: bodyText,
-        footer: footerText,
-        buttons,
-        updatedAt: 'Just now',
-      };
-
-      setTemplates([newTpl, ...templates]);
-      setMessage('Template submitted to Meta Graph API for review! Approval typically takes 2-5 minutes.');
+      await loadData();
+      setMessage(
+        submitImmediately
+          ? `Template "${created.name}" submitted live to Meta Graph API! Status: ${created.status}${created.metaTemplateId ? ` (Meta ID: ${created.metaTemplateId})` : ''}`
+          : `Template "${created.name}" saved as local draft.`
+      );
       setViewMode('list');
     } catch (err: any) {
-      // Still update UI in case server is simulated
-      const newTpl = {
-        id: `tpl-${Date.now()}`,
-        name,
-        category,
-        language,
-        status: 'APPROVED',
-        header: { type: headerType, text: headerText },
-        body: bodyText,
-        footer: footerText,
-        buttons,
-        updatedAt: 'Just now',
-      };
-      setTemplates([newTpl, ...templates]);
-      setMessage('Template recorded and approved in local catalog!');
-      setViewMode('list');
+      setErrorMsg(err.message || 'Failed to create or submit template');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmitExistingToMeta = async (tplId: string) => {
+    setSubmittingTplId(tplId);
+    setMessage(null);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch(`/templates/${tplId}/submit`, {
+        method: 'POST',
+        body: '{}',
+      });
+      await loadData();
+      setMessage(
+        `Submitted to Meta Graph API! Status: ${res?.template?.status || 'PENDING'} (Meta Template ID: ${res?.template?.metaTemplateId || 'assigned'})`
+      );
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Submission to Meta failed');
+    } finally {
+      setSubmittingTplId(null);
+    }
+  };
+
+  const handleDeleteTemplate = async (tplId: string, tplName: string) => {
+    if (!window.confirm(`Delete template "${tplName}" from local catalog?`)) return;
+    setErrorMsg(null);
+    try {
+      await apiFetch(`/templates/${tplId}`, { method: 'DELETE' });
+      await loadData();
+      setMessage(`Template "${tplName}" deleted.`);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Delete failed');
     }
   };
 
@@ -210,6 +292,13 @@ export default function TemplatesPage() {
     return matchesCategory && matchesSearch;
   });
 
+  const bodyVarTokens = Array.from(new Set(bodyText.match(/\{\{(\d+)\}\}/g) || []));
+
+  const previewBody =
+    category === 'AUTHENTICATION'
+      ? `${sampleVariables['1'] || '482913'} is your verification code. For your security, do not share this code.`
+      : bodyText.replace(/\{\{(\d+)\}\}/g, (_, idx) => sampleVariables[idx] || `{{${idx}}}`);
+
   return (
     <div className="space-y-8 pb-10">
       {/* Header */}
@@ -218,31 +307,41 @@ export default function TemplatesPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-slate-900">WhatsApp Template Studio</h1>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-              Meta Approved
+              Meta Cloud Sync
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Design, preview, and sync compliant WhatsApp templates with the Meta Graph API v20.0.
+            Author, sync, and submit Utility, Marketing, and Authentication (OTP) message templates directly via Meta Graph API v20.0.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleSyncFromMeta}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+            <span>{isSyncing ? 'Syncing Meta...' : 'Sync from Meta'}</span>
+          </button>
+
           {viewMode === 'list' ? (
             <button
               onClick={() => {
-                setName(`promo_blast_${Date.now().toString().slice(-4)}`);
+                setErrorMsg(null);
+                setMessage(null);
                 setViewMode('builder');
               }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" /> Create Template
             </button>
           ) : (
             <button
               onClick={() => setViewMode('list')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
             >
-              <ArrowLeft className="w-4 h-4" /> Back to Templates Catalog
+              <ArrowLeft className="w-4 h-4" /> Back to Catalog
             </button>
           )}
         </div>
@@ -255,391 +354,382 @@ export default function TemplatesPage() {
         </div>
       )}
 
-      {/* VIEW 1: Template Catalog */}
-      {viewMode === 'list' && (
-        <div className="space-y-6">
-          {/* Filters Bar */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 w-full sm:w-72">
-              <Search className="w-4 h-4 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                placeholder="Search templates by name or text..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-transparent border-none text-xs text-slate-900 focus:outline-none w-full"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto">
-              {(['ALL', 'MARKETING', 'UTILITY', 'AUTHENTICATION'] as const).map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setFilterCategory(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap ${
-                    filterCategory === cat
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {cat === 'ALL' ? 'All Templates' : cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Templates Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTemplates.map((tpl) => (
-              <div
-                key={tpl.id}
-                className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span
-                      className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md ${
-                        tpl.category === 'MARKETING'
-                          ? 'bg-purple-100 text-purple-800'
-                          : tpl.category === 'UTILITY'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {tpl.category}
-                    </span>
-
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
-                        tpl.status === 'APPROVED'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : tpl.status === 'PENDING'
-                          ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          tpl.status === 'APPROVED' ? 'bg-emerald-500' : 'bg-amber-500'
-                        }`}
-                      />
-                      {tpl.status}
-                    </span>
-                  </div>
-
-                  <h3 className="text-base font-bold text-slate-900 font-mono tracking-tight group-hover:text-emerald-700 transition-colors">
-                    {tpl.name}
-                  </h3>
-                  <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-                    <span>Language: {tpl.language}</span>
-                    <span>•</span>
-                    <span>ID: {tpl.id}</span>
-                  </div>
-
-                  {/* Body Preview */}
-                  <div className="mt-4 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100 text-xs text-slate-700 leading-relaxed font-sans line-clamp-4">
-                    {tpl.body}
-                  </div>
-
-                  {/* Buttons List */}
-                  {tpl.buttons && tpl.buttons.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {tpl.buttons.map((b, i) => (
-                        <span
-                          key={i}
-                          className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md"
-                        >
-                          {b.type === 'URL' ? '🔗 ' : '💬 '} {b.text}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                  <span className="text-[11px]">Updated {tpl.updatedAt}</span>
-                  <button
-                    onClick={() => {
-                      setName(tpl.name);
-                      setCategory(tpl.category as any);
-                      setHeaderText(tpl.header?.text || '');
-                      setHeaderType(tpl.header?.type || 'NONE');
-                      setBodyText(tpl.body);
-                      setFooterText(tpl.footer || '');
-                      setButtons(tpl.buttons || []);
-                      setViewMode('builder');
-                    }}
-                    className="font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-emerald-50 transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Open in Studio</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+      {errorMsg && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-800 text-xs font-semibold shadow-xs">
+          <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* VIEW 2: Visual Studio with Real-time Sticky Phone Mockup */}
-      {viewMode === 'builder' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Form Builder Controls */}
-          <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-lg font-black text-slate-900 tracking-tight">Template Configuration</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Complies with Meta WhatsApp Cloud API Guidelines</p>
-              </div>
-              <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Live Validation
-              </div>
+      {/* VIEW 1: TEMPLATES LIST */}
+      {viewMode === 'list' && (
+        <div className="space-y-5">
+          {/* Filters & Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {(['ALL', 'UTILITY', 'AUTHENTICATION', 'MARKETING'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setFilterCategory(cat)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    filterCategory === cat
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {cat === 'AUTHENTICATION' ? 'OTP / AUTHENTICATION' : cat}
+                </button>
+              ))}
             </div>
 
-            {/* Template Identity */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search template name..."
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              <span>Loading templates catalog...</span>
+            </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-3">
+              <FileCode2 className="w-10 h-10 text-emerald-600 mx-auto" />
+              <h3 className="text-base font-black text-slate-900">No Templates Found</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Click <strong>Sync from Meta</strong> to import your existing approved templates (including OTP templates), or click <strong>Create Template</strong> to submit a new one.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredTemplates.map((tpl) => (
+                <div
+                  key={tpl.id}
+                  className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900 font-mono break-all">{tpl.name}</h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                            {tpl.category}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500">{tpl.language}</span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                          tpl.status === 'APPROVED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : tpl.status === 'PENDING'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : tpl.status === 'REJECTED'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {tpl.status === 'APPROVED' && <CheckCircle2 className="w-3 h-3" />}
+                        {tpl.status === 'PENDING' && <Clock className="w-3 h-3" />}
+                        {tpl.status === 'REJECTED' && <XCircle className="w-3 h-3" />}
+                        {tpl.status}
+                      </span>
+                    </div>
+
+                    {tpl.metaTemplateId && (
+                      <div className="text-[10px] font-mono text-slate-400">
+                        Meta Template ID: <span className="text-slate-600 font-semibold">{tpl.metaTemplateId}</span>
+                      </div>
+                    )}
+
+                    {/* Message Bubble Preview */}
+                    <div className="p-3.5 rounded-2xl bg-[#E7FFDB]/60 border border-emerald-200/60 text-xs text-slate-800 space-y-1.5">
+                      {tpl.header.type === 'TEXT' && tpl.header.text && (
+                        <div className="font-black text-slate-900 text-xs">{tpl.header.text}</div>
+                      )}
+                      <p className="leading-relaxed whitespace-pre-wrap text-xs">{tpl.body}</p>
+                      {tpl.footer && <div className="text-[10px] text-slate-500 pt-1">{tpl.footer}</div>}
+                    </div>
+
+                    {tpl.rejectionReason && (
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-700">
+                        <strong>Reason:</strong> {tpl.rejectionReason}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-400">{tpl.updatedAt}</span>
+                    <div className="flex items-center gap-2">
+                      {(tpl.status === 'DRAFT' || tpl.status === 'REJECTED') && (
+                        <button
+                          onClick={() => handleSubmitExistingToMeta(tpl.id)}
+                          disabled={submittingTplId === tpl.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold disabled:opacity-50"
+                        >
+                          {submittingTplId === tpl.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Send className="w-3 h-3" />
+                          )}
+                          <span>Submit to Meta</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteTemplate(tpl.id, tpl.name)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Delete template"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW 2: TEMPLATE BUILDER */}
+      {viewMode === 'builder' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-5">
+            {/* WABA Selector */}
+            {accounts.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                  Target WhatsApp Business Account (WABA)
+                </label>
+                <select
+                  value={selectedWabaId}
+                  onChange={(e) => setSelectedWabaId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} (WABA ID: {a.wabaId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Name, Category, Language */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-1">
                 <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
                   Template Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
-                  required
                   value={name}
-                  onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                  placeholder="festive_promo_v1"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-mono shadow-xs"
+                  onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                  placeholder="order_update_v1"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  Lowercase alphanumeric and underscores only.
-                </span>
+                <span className="text-[10px] text-slate-400 mt-1 block">Lowercase letters, numbers &amp; _</span>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
-                  Category <span className="text-rose-500">*</span>
+                  Category
                 </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as any)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs shadow-xs font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold"
                 >
-                  <option value="MARKETING">Marketing (Promotions)</option>
-                  <option value="UTILITY">Utility (Orders/Alerts)</option>
-                  <option value="AUTHENTICATION">Authentication (OTPs)</option>
+                  <option value="UTILITY">UTILITY (Transactional)</option>
+                  <option value="AUTHENTICATION">AUTHENTICATION (OTP Code)</option>
+                  <option value="MARKETING">MARKETING (Promotional)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                  Language Code
+                </label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold"
+                >
+                  <option value="en_US">English (US) - en_US</option>
+                  <option value="en">English - en</option>
+                  <option value="en_GB">English (UK) - en_GB</option>
+                  <option value="hi">Hindi - hi</option>
                 </select>
               </div>
             </div>
 
-            {/* Header Configuration */}
-            <div>
-              <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-2">
-                Message Header (Optional)
-              </label>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {(['NONE', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setHeaderType(t)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                      headerType === t
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+            {category === 'AUTHENTICATION' ? (
+              <div className="p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2 text-xs text-emerald-950">
+                <div className="flex items-center gap-2 font-black text-emerald-900">
+                  <KeyRound className="w-4 h-4 text-emerald-700" />
+                  <span>Meta Official OTP Preset (Graph API v20.0 Compliant)</span>
+                </div>
+                <p className="text-slate-700 leading-relaxed">
+                  Meta mandates fixed preset text for <strong>AUTHENTICATION</strong> templates:
+                  <code className="block mt-2 p-2.5 rounded-xl bg-white border border-emerald-200 font-mono text-xs">
+                    *&#123;&#123;1&#125;&#125;* is your verification code. For your security, do not share this code.
+                  </code>
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  Includes security recommendation, 10-minute code expiration footer, and one-click <strong>Copy code</strong> OTP button.
+                </p>
               </div>
-
-              {headerType === 'TEXT' && (
-                <input
-                  type="text"
-                  value={headerText}
-                  onChange={(e) => setHeaderText(e.target.value)}
-                  placeholder="e.g. Special Deal for {{1}}"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs shadow-xs"
-                />
-              )}
-            </div>
-
-            {/* Body Textarea with Variable Token Insertion */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider">
-                  Body Message Text <span className="text-rose-500">*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={insertVariable}
-                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Insert Variable &#123;&#123;n&#125;&#125;
-                </button>
-              </div>
-              <textarea
-                rows={5}
-                required
-                value={bodyText}
-                onChange={(e) => setBodyText(e.target.value)}
-                placeholder="Enter your message text. Use {{1}}, {{2}} for dynamic recipient variables..."
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs leading-relaxed shadow-xs"
-              />
-            </div>
-
-            {/* Variable Sample Value Customizer */}
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              <span className="text-xs font-bold text-slate-900 block">
-                Sample Values for Live Phone Preview:
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {Object.keys(sampleVariables).map((vKey) => (
-                  <div key={vKey}>
-                    <label className="block text-[10px] font-bold text-slate-500 font-mono mb-1">
-                      &#123;&#123;{vKey}&#125;&#125; Value
-                    </label>
-                    <input
-                      type="text"
-                      value={sampleVariables[vKey]}
-                      onChange={(e) =>
-                        setSampleVariables({ ...sampleVariables, [vKey]: e.target.value })
-                      }
-                      className="w-full px-2.5 py-1.5 bg-white rounded-lg border border-slate-300 text-xs shadow-xs"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Footer Text */}
-            <div>
-              <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
-                Footer Text (Optional)
-              </label>
-              <input
-                type="text"
-                value={footerText}
-                onChange={(e) => setFooterText(e.target.value)}
-                placeholder="e.g. Reply STOP to opt out"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs shadow-xs"
-              />
-            </div>
-
-            {/* Interactive Buttons */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider">
-                  Interactive Action Buttons (Max 3)
-                </label>
-                {buttons.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setButtons([
-                        ...buttons,
-                        { type: 'QUICK_REPLY', text: `Option ${buttons.length + 1}` },
-                      ])
-                    }
-                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Button
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-2.5">
-                {buttons.map((b, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            ) : (
+              <>
+                {/* Header */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                    Header (Optional)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <select
-                      value={b.type}
-                      onChange={(e) => {
-                        const newBtns = [...buttons];
-                        newBtns[i].type = e.target.value as any;
-                        setButtons(newBtns);
-                      }}
-                      className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-xs"
+                      value={headerType}
+                      onChange={(e) => setHeaderType(e.target.value as any)}
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold"
                     >
-                      <option value="QUICK_REPLY">Quick Reply</option>
-                      <option value="URL">Visit Website URL</option>
-                      <option value="PHONE_NUMBER">Call Phone</option>
+                      <option value="NONE">None</option>
+                      <option value="TEXT">Text Header</option>
                     </select>
-
-                    <input
-                      type="text"
-                      value={b.text}
-                      onChange={(e) => {
-                        const newBtns = [...buttons];
-                        newBtns[i].text = e.target.value;
-                        setButtons(newBtns);
-                      }}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white shadow-xs"
-                      placeholder="Button Display Text"
-                    />
-
-                    {b.type === 'URL' && (
+                    {headerType === 'TEXT' && (
                       <input
-                        type="url"
-                        value={b.url || ''}
-                        onChange={(e) => {
-                          const newBtns = [...buttons];
-                          newBtns[i].url = e.target.value;
-                          setButtons(newBtns);
-                        }}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white shadow-xs font-mono"
-                        placeholder="https://..."
+                        type="text"
+                        value={headerText}
+                        onChange={(e) => setHeaderText(e.target.value)}
+                        placeholder="Order Confirmation #{{1}}"
+                        className="sm:col-span-2 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
                       />
                     )}
+                  </div>
+                </div>
 
+                {/* Body */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider">
+                      Message Body <span className="text-rose-500">*</span>
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setButtons(buttons.filter((_, idx) => idx !== i))}
-                      className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 rounded-lg transition-colors"
+                      onClick={insertVariable}
+                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      + Add Variable &#123;&#123;n&#125;&#125;
                     </button>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <textarea
+                    rows={4}
+                    value={bodyText}
+                    onChange={(e) => setBodyText(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-xs leading-relaxed"
+                  />
+                </div>
 
-            {/* Action Buttons */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                {/* Sample Variables (Required by Meta for review!) */}
+                {bodyVarTokens.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                    <div className="text-[11px] font-bold text-slate-700">
+                      Sample Variable Values for Meta Approval (Required by Meta Graph API)
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {bodyVarTokens.map((tok) => {
+                        const num = tok.replace(/\D/g, '');
+                        return (
+                          <div key={tok}>
+                            <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                              Example for {tok}
+                            </label>
+                            <input
+                              type="text"
+                              value={sampleVariables[num] || ''}
+                              onChange={(e) =>
+                                setSampleVariables((prev) => ({ ...prev, [num]: e.target.value }))
+                              }
+                              placeholder={`Sample for ${tok}`}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                    Footer Text (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={footerText}
+                    onChange={(e) => setFooterText(e.target.value)}
+                    placeholder="Reply STOP to opt out"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="pt-3 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+                disabled={isSubmitting || !name}
+                onClick={() => handleCreateTemplate(true)}
+                className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-50"
               >
-                Cancel
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <span>Create &amp; Submit to Meta Graph API</span>
               </button>
+
               <button
                 type="button"
-                onClick={handleCreateTemplate}
-                disabled={isSubmitting || !name || !bodyText}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                disabled={isSubmitting || !name}
+                onClick={() => handleCreateTemplate(false)}
+                className="px-4 py-3 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs disabled:opacity-50"
               >
-                {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                Submit to Meta Graph API
+                Save Local Draft Only
               </button>
             </div>
           </div>
 
-          {/* Right Column: Live Sticky Smartphone Mockup */}
+          {/* Live WhatsApp Handset Preview */}
           <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
             <div className="text-center">
               <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-xs">
-                📱 Real-Time Customer Preview
+                📱 Live Meta Template Preview
               </span>
             </div>
 
             <WhatsAppChatMockup
-              headerType={headerType}
-              headerText={headerText}
-              bodyText={bodyText}
-              footerText={footerText}
-              buttons={buttons}
-              variables={sampleVariables}
-              time="10:14 AM"
+              headerType={category === 'AUTHENTICATION' ? undefined : headerType === 'NONE' ? undefined : 'TEXT'}
+              headerText={
+                category === 'AUTHENTICATION'
+                  ? undefined
+                  : headerType === 'TEXT'
+                    ? headerText.replace('{{1}}', sampleVariables['1'] || '1024')
+                    : undefined
+              }
+              bodyText={previewBody}
+              footerText={category === 'AUTHENTICATION' ? 'This code expires in 10 minutes.' : footerText}
+              buttons={
+                category === 'AUTHENTICATION'
+                  ? [{ type: 'QUICK_REPLY', text: 'Copy code' }]
+                  : buttons
+              }
+              time="Just now"
             />
           </div>
         </div>

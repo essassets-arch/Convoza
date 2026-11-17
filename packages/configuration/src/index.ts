@@ -13,12 +13,14 @@ export const APP_CONFIG = {
 };
 
 export const META_CONFIG = {
-  GRAPH_API_VERSION: 'v20.0',
-  GRAPH_API_BASE: 'https://graph.facebook.com/v20.0',
-  OAUTH_ACCESS_TOKEN_URL: 'https://graph.facebook.com/v20.0/oauth/access_token',
+  GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION || 'v20.0',
+  GRAPH_API_BASE: `https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION || 'v20.0'}`,
+  OAUTH_ACCESS_TOKEN_URL: `https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION || 'v20.0'}/oauth/access_token`,
   WEBHOOK_VERIFY_TOKEN: process.env.META_WEBHOOK_VERIFY_TOKEN || 'convoza_meta_verify_token_secure_2026',
   APP_SECRET: process.env.META_APP_SECRET || 'convoza_meta_app_secret_placeholder',
-  APP_ID: process.env.META_APP_ID || '',
+  APP_ID: process.env.META_APP_ID || '4558736907726599',
+  CONFIG_ID: process.env.META_CONFIG_ID || '',
+  HOSTED_ES_URL: process.env.META_HOSTED_ES_URL || '',
   SYSTEM_USER_ACCESS_TOKEN: process.env.META_SYSTEM_USER_ACCESS_TOKEN || '',
 };
 
@@ -112,4 +114,133 @@ export function verifyRazorpaySignature(rawBody: string, signature: string, webh
     return false;
   }
 }
+
+/**
+ * Build an official Meta WhatsApp Cloud API v20.0 /messages payload.
+ * Handles TEXT, media, UTILITY/MARKETING templates, and AUTHENTICATION (OTP Copy Code) templates.
+ */
+export function buildMetaMessagePayload(options: {
+  recipientPhone: string;
+  type: string;
+  body?: string;
+  mediaUrl?: string;
+  templateName?: string;
+  templateLanguage?: string;
+  templateCategory?: string;
+  templateComponents?: any[];
+  templateParameters?: Record<string, any> | null;
+}): Record<string, any> {
+  const to = options.recipientPhone.replace(/[^\d]/g, '');
+  const base: Record<string, any> = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+  };
+
+  if (options.type === 'TEMPLATE' && options.templateName) {
+    const paramsMap = options.templateParameters || {};
+    const orderedValues = Object.keys(paramsMap)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => String(paramsMap[k]));
+
+    const sendComponents: any[] = [];
+    const tplComponents = Array.isArray(options.templateComponents) ? options.templateComponents : [];
+    const isAuth = (options.templateCategory || '').toUpperCase() === 'AUTHENTICATION';
+
+    // 1. Header component parameters (text variable or media header)
+    const headerDef = tplComponents.find((c) => (c.type || '').toUpperCase() === 'HEADER');
+    if (headerDef && !isAuth) {
+      const format = (headerDef.format || 'TEXT').toUpperCase();
+      if (format === 'TEXT' && typeof headerDef.text === 'string' && headerDef.text.includes('{{')) {
+        const headerVal = paramsMap['header_1'] || orderedValues[0] || 'Customer';
+        sendComponents.push({
+          type: 'header',
+          parameters: [{ type: 'text', text: String(headerVal) }],
+        });
+      } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(format) && options.mediaUrl) {
+        const mediaKey = format.toLowerCase();
+        sendComponents.push({
+          type: 'header',
+          parameters: [{ type: mediaKey, [mediaKey]: { link: options.mediaUrl } }],
+        });
+      }
+    }
+
+    // 2. Body component parameters
+    const bodyDef = tplComponents.find((c) => (c.type || '').toUpperCase() === 'BODY');
+    const bodyVarMatches = typeof bodyDef?.text === 'string' ? bodyDef.text.match(/\{\{(\d+)\}\}/g) : null;
+    const expectedBodyVarCount = isAuth
+      ? Math.max(1, bodyVarMatches ? new Set(bodyVarMatches).size : 1)
+      : bodyVarMatches
+        ? new Set(bodyVarMatches).size
+        : orderedValues.length;
+
+    if (expectedBodyVarCount > 0 && orderedValues.length > 0) {
+      const bodyParams = [];
+      for (let i = 0; i < expectedBodyVarCount; i++) {
+        const val = paramsMap[String(i + 1)] ?? orderedValues[i] ?? orderedValues[0] ?? '';
+        bodyParams.push({ type: 'text', text: String(val) });
+      }
+      sendComponents.push({
+        type: 'body',
+        parameters: bodyParams,
+      });
+    }
+
+    // 3. Button parameters (AUTHENTICATION Copy Code OTP buttons + dynamic URL {{1}} buttons)
+    const buttonsDef = tplComponents.find((c) => (c.type || '').toUpperCase() === 'BUTTONS');
+    const buttonsList: any[] = Array.isArray(buttonsDef?.buttons) ? buttonsDef.buttons : [];
+
+    if (buttonsList.length > 0) {
+      buttonsList.forEach((btn, idx) => {
+        const btnType = (btn.type || '').toUpperCase();
+        const hasDynamicUrl = btnType === 'URL' && typeof btn.url === 'string' && btn.url.includes('{{');
+        const isOtpBtn = btnType === 'OTP' || (isAuth && idx === 0 && (btnType === 'URL' || btnType === 'OTP'));
+
+        if (isOtpBtn || hasDynamicUrl) {
+          const btnVal = paramsMap[`button_${idx}`] || paramsMap['1'] || orderedValues[0] || '';
+          if (btnVal) {
+            sendComponents.push({
+              type: 'button',
+              sub_type: 'url',
+              index: String(idx),
+              parameters: [{ type: 'text', text: String(btnVal) }],
+            });
+          }
+        }
+      });
+    } else if (isAuth && orderedValues.length > 0) {
+      // Fallback for AUTHENTICATION templates synced without explicit buttons metadata
+      sendComponents.push({
+        type: 'button',
+        sub_type: 'url',
+        index: '0',
+        parameters: [{ type: 'text', text: String(orderedValues[0]) }],
+      });
+    }
+
+    base.type = 'template';
+    base.template = {
+      name: options.templateName,
+      language: { code: options.templateLanguage || 'en_US' },
+      ...(sendComponents.length > 0 ? { components: sendComponents } : {}),
+    };
+    return base;
+  }
+
+  if (['IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO'].includes((options.type || '').toUpperCase()) && options.mediaUrl) {
+    const mediaKey = options.type.toLowerCase();
+    base.type = mediaKey;
+    base[mediaKey] = {
+      link: options.mediaUrl,
+      ...(options.body && mediaKey !== 'audio' ? { caption: options.body } : {}),
+    };
+    return base;
+  }
+
+  base.type = 'text';
+  base.text = { preview_url: false, body: options.body || '' };
+  return base;
+}
+
 

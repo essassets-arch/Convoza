@@ -115,13 +115,22 @@ export class TemplatesService {
       throw new BadRequestException(componentsValidation.errors.join(', '));
     }
 
-    // 3. Verify WhatsApp account exists and belongs to organization
-    const account = await this.prisma.whatsAppAccount.findFirst({
-      where: { id: dto.whatsappAccountId, organizationId },
-    });
+    // 3. Verify WhatsApp account exists and belongs to organization (or pick active connected account)
+    let account = dto.whatsappAccountId
+      ? await this.prisma.whatsAppAccount.findFirst({
+          where: { id: dto.whatsappAccountId, organizationId },
+        })
+      : null;
 
     if (!account) {
-      throw new NotFoundException('WhatsApp account not found in this organization');
+      account = await this.prisma.whatsAppAccount.findFirst({
+        where: { organizationId },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (!account) {
+      throw new NotFoundException('No connected WhatsApp Business Account (WABA) found in this organization. Connect a WABA first.');
     }
 
     // 4. Check for duplicate template name in this language
@@ -139,10 +148,10 @@ export class TemplatesService {
       );
     }
 
-    return this.prisma.template.create({
+    const created = await this.prisma.template.create({
       data: {
         organizationId,
-        whatsappAccountId: dto.whatsappAccountId,
+        whatsappAccountId: account.id,
         name: nameValidation.data!,
         language: dto.language || 'en_US',
         category: dto.category,
@@ -150,6 +159,13 @@ export class TemplatesService {
         components: dto.components as any,
       },
     });
+
+    if (dto.submitImmediately) {
+      const submitted = await this.submitToMeta(organizationId, created.id);
+      return submitted.template;
+    }
+
+    return created;
   }
 
   async updateTemplate(organizationId: string, id: string, dto: UpdateTemplateDto) {
@@ -216,18 +232,24 @@ export class TemplatesService {
     }
 
     if (!template.whatsappAccount.credentials) {
-      throw new BadRequestException('WhatsApp account credentials missing');
+      throw new BadRequestException(
+        'WhatsApp account access token is missing. Please connect your Meta WABA credentials under WhatsApp Numbers first.'
+      );
     }
 
     const decryptedToken = decryptSecret(template.whatsappAccount.credentials.encryptedToken);
+    const metaComponents = this.buildMetaSubmissionComponents(
+      template.category,
+      (template.components as any[]) || []
+    );
 
     try {
-      // Format payload according to Meta WhatsApp Business API specification
+      // Format payload according to Meta WhatsApp Business API v20.0 specification
       const metaPayload = {
         name: template.name,
         category: template.category,
         language: template.language,
-        components: template.components,
+        components: metaComponents,
       };
 
       const res = await axios.post(
@@ -238,7 +260,7 @@ export class TemplatesService {
             Authorization: `Bearer ${decryptedToken}`,
             'Content-Type': 'application/json',
           },
-          timeout: 12000,
+          timeout: 15000,
         }
       );
 
@@ -250,6 +272,7 @@ export class TemplatesService {
         data: {
           metaTemplateId,
           status: this.mapMetaStatus(metaStatus),
+          rejectionReason: null,
         },
       });
 
@@ -259,10 +282,13 @@ export class TemplatesService {
         metaResponse: res.data,
       };
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error?.message || err.message;
+      const errorMsg =
+        err.response?.data?.error?.error_user_msg ||
+        err.response?.data?.error?.message ||
+        err.message;
       this.logger.error(`Meta template submission failed: ${errorMsg}`);
-      
-      // Update template with rejection details if rejected immediately
+
+      // Keep template editable with diagnostic reason
       await this.prisma.template.update({
         where: { id },
         data: {
@@ -271,78 +297,183 @@ export class TemplatesService {
         },
       });
 
-      throw new BadRequestException(`Meta template submission error: ${errorMsg}`);
+      throw new BadRequestException(`Meta Graph API error: ${errorMsg}`);
     }
   }
 
   /**
-   * Sync all templates under the WABA from Meta Cloud API
+   * Sync all templates under the WABA (or all connected WABAs) from Meta Cloud API
    */
-  async syncTemplates(organizationId: string, whatsappAccountId: string) {
-    const account = await this.prisma.whatsAppAccount.findFirst({
-      where: { id: whatsappAccountId, organizationId },
-      include: { credentials: true },
-    });
+  async syncTemplates(organizationId: string, whatsappAccountId?: string) {
+    const accounts = whatsappAccountId
+      ? await this.prisma.whatsAppAccount.findMany({
+          where: { id: whatsappAccountId, organizationId },
+          include: { credentials: true },
+        })
+      : await this.prisma.whatsAppAccount.findMany({
+          where: { organizationId },
+          include: { credentials: true },
+        });
 
-    if (!account || !account.credentials) {
-      throw new BadRequestException('Valid WhatsApp account and credentials required');
+    const accountsWithCreds = accounts.filter((a) => a.credentials?.encryptedToken);
+    if (accountsWithCreds.length === 0) {
+      throw new BadRequestException(
+        'No WhatsApp Business Account with live Meta credentials found. Connect your WABA in WhatsApp Numbers first.'
+      );
     }
 
-    const decryptedToken = decryptSecret(account.credentials.encryptedToken);
+    const updatedList = [];
 
-    try {
-      const res = await axios.get(
-        `${META_CONFIG.GRAPH_API_BASE}/${account.wabaId}/message_templates`,
-        {
-          headers: { Authorization: `Bearer ${decryptedToken}` },
-          params: { limit: 100 },
-          timeout: 15000,
-        }
-      );
+    for (const account of accountsWithCreds) {
+      const decryptedToken = decryptSecret(account.credentials!.encryptedToken);
 
-      const metaTemplates = res.data?.data || [];
-      const updatedList = [];
+      try {
+        const res = await axios.get(
+          `${META_CONFIG.GRAPH_API_BASE}/${account.wabaId}/message_templates`,
+          {
+            headers: { Authorization: `Bearer ${decryptedToken}` },
+            params: { limit: 100 },
+            timeout: 15000,
+          }
+        );
 
-      for (const mt of metaTemplates) {
-        const localStatus = this.mapMetaStatus(mt.status);
-        const mappedCategory = this.mapMetaCategory(mt.category);
+        const metaTemplates = res.data?.data || [];
 
-        const upserted = await this.prisma.template.upsert({
-          where: {
-            organizationId_name_language: {
+        for (const mt of metaTemplates) {
+          const localStatus = this.mapMetaStatus(mt.status);
+          const mappedCategory = this.mapMetaCategory(mt.category);
+
+          const upserted = await this.prisma.template.upsert({
+            where: {
+              organizationId_name_language: {
+                organizationId,
+                name: mt.name,
+                language: mt.language,
+              },
+            },
+            create: {
               organizationId,
+              whatsappAccountId: account.id,
               name: mt.name,
               language: mt.language,
+              category: mappedCategory,
+              status: localStatus,
+              metaTemplateId: mt.id,
+              components: mt.components || [],
+              rejectionReason: mt.rejected_reason && mt.rejected_reason !== 'NONE' ? mt.rejected_reason : null,
             },
-          },
-          create: {
-            organizationId,
-            whatsappAccountId: account.id,
-            name: mt.name,
-            language: mt.language,
-            category: mappedCategory,
-            status: localStatus,
-            metaTemplateId: mt.id,
-            components: mt.components || [],
-            rejectionReason: mt.rejected_reason || null,
-          },
-          update: {
-            status: localStatus,
-            metaTemplateId: mt.id,
-            components: mt.components || [],
-            rejectionReason: mt.rejected_reason || null,
-          },
-        });
-        updatedList.push(upserted);
+            update: {
+              whatsappAccountId: account.id,
+              category: mappedCategory,
+              status: localStatus,
+              metaTemplateId: mt.id,
+              components: mt.components || [],
+              rejectionReason: mt.rejected_reason && mt.rejected_reason !== 'NONE' ? mt.rejected_reason : null,
+            },
+          });
+          updatedList.push(upserted);
+        }
+      } catch (err: any) {
+        const msg = err.response?.data?.error?.message || err.message;
+        throw new BadRequestException(`Failed to sync templates from Meta: ${msg}`);
+      }
+    }
+
+    return {
+      syncedCount: updatedList.length,
+      templates: updatedList,
+    };
+  }
+
+  /**
+   * Ensure components conform to Meta Graph API v20.0 submission rules,
+   * including AUTHENTICATION preset format and required `example` values for {{1}} variables.
+   */
+  private buildMetaSubmissionComponents(category: string, rawComponents: any[]): any[] {
+    if (category === TemplateCategory.AUTHENTICATION) {
+      return [
+        {
+          type: 'BODY',
+          add_security_recommendation: true,
+        },
+        {
+          type: 'FOOTER',
+          code_expiration_minutes: 10,
+        },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            {
+              type: 'OTP',
+              otp_type: 'COPY_CODE',
+              text: 'Copy code',
+            },
+          ],
+        },
+      ];
+    }
+
+    return rawComponents.map((comp) => {
+      const type = (comp.type || '').toUpperCase();
+
+      if (type === 'HEADER') {
+        const format = (comp.format || 'TEXT').toUpperCase();
+        if (format === 'TEXT' && typeof comp.text === 'string') {
+          const vars = comp.text.match(/\{\{(\d+)\}\}/g);
+          if (vars && vars.length > 0 && !comp.example?.header_text) {
+            return {
+              type: 'HEADER',
+              format: 'TEXT',
+              text: comp.text,
+              example: { header_text: ['ORD-1024'] },
+            };
+          }
+          return { type: 'HEADER', format: 'TEXT', text: comp.text, ...(comp.example ? { example: comp.example } : {}) };
+        }
+        return comp;
       }
 
-      return {
-        syncedCount: updatedList.length,
-        templates: updatedList,
-      };
-    } catch (err: any) {
-      throw new BadRequestException(`Failed to sync templates from Meta: ${err.message}`);
-    }
+      if (type === 'BODY' && typeof comp.text === 'string') {
+        const vars = Array.from(new Set(comp.text.match(/\{\{(\d+)\}\}/g) || []));
+        if (vars.length > 0 && !comp.example?.body_text) {
+          const sampleRow = vars.map((_, idx) => (idx === 0 ? 'Alex' : `VAL${idx + 1}`));
+          return {
+            type: 'BODY',
+            text: comp.text,
+            example: { body_text: [sampleRow] },
+          };
+        }
+        return { type: 'BODY', text: comp.text, ...(comp.example ? { example: comp.example } : {}) };
+      }
+
+      if (type === 'FOOTER' && typeof comp.text === 'string') {
+        return { type: 'FOOTER', text: comp.text };
+      }
+
+      if (type === 'BUTTONS' && Array.isArray(comp.buttons)) {
+        const formattedButtons = comp.buttons.map((b: any) => {
+          const bType = (b.type || '').toUpperCase();
+          if (bType === 'URL' && typeof b.url === 'string') {
+            if (b.url.includes('{{') && !b.example) {
+              return {
+                type: 'URL',
+                text: b.text,
+                url: b.url,
+                example: [b.url.replace(/\{\{\d+\}\}/g, 'track123')],
+              };
+            }
+            return { type: 'URL', text: b.text, url: b.url, ...(b.example ? { example: b.example } : {}) };
+          }
+          if (bType === 'PHONE_NUMBER') {
+            return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phoneNumber || b.phone_number };
+          }
+          return { type: 'QUICK_REPLY', text: b.text };
+        });
+        return { type: 'BUTTONS', buttons: formattedButtons };
+      }
+
+      return comp;
+    });
   }
 
   private mapMetaStatus(status?: string): TemplateStatus {

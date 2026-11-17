@@ -82,7 +82,24 @@ export class WhatsAppService {
       throw new ConflictException('This WhatsApp phone number is already registered to another organization');
     }
 
-    // 3. Encrypt the access token securely using AES-256-GCM
+    // 3. Subscribe app to WABA webhooks on Meta (best-effort)
+    let webhookSubscribed = true;
+    try {
+      await axios.post(
+        `${META_CONFIG.GRAPH_API_BASE}/${dto.wabaId}/subscribed_apps`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${dto.accessToken}` },
+          timeout: 8000,
+        }
+      );
+    } catch (subErr: any) {
+      this.logger.warn(
+        `WABA webhook subscription warning (${dto.wabaId}): ${subErr.response?.data?.error?.message || subErr.message}`
+      );
+    }
+
+    // 4. Encrypt the access token securely using AES-256-GCM
     const encryptedToken = encryptSecret(dto.accessToken);
 
     return this.prisma.$transaction(async (tx) => {
@@ -178,9 +195,10 @@ export class WhatsAppService {
     return {
       appId: META_CONFIG.APP_ID,
       version: META_CONFIG.GRAPH_API_VERSION,
-      configId: process.env.META_CONFIG_ID || '',
+      configId: META_CONFIG.CONFIG_ID,
+      hostedEmbeddedSignupUrl: META_CONFIG.HOSTED_ES_URL,
       state: `org_${organizationId}_${Date.now()}`,
-      redirectUri: `${process.env.DASHBOARD_URL || 'http://localhost:3001'}/whatsapp/callback`,
+      redirectUri: `${process.env.DASHBOARD_URL || 'https://convoza.emperorsmartsolutions.com'}/dashboard/whatsapp`,
       scope: 'whatsapp_business_management,whatsapp_business_messaging',
     };
   }

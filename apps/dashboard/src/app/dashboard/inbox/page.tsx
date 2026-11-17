@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { WhatsAppIcon } from '@convoza/ui';
+import { apiFetch, getApiOrigin } from '../../../lib/api';
 
 export default function SharedInboxPage() {
   const [conversations, setConversations] = useState([
@@ -130,11 +131,63 @@ export default function SharedInboxPage() {
     'Would you like me to connect you with billing support?',
   ];
 
-  // Socket.IO real-time connection
+  // Load live conversations + Socket.IO real-time connection
   useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('convoza_access_token') : null;
+    if (token) {
+      apiFetch<{ items: any[] }>('/inbox/conversations?limit=50')
+        .then((res) => {
+          const items = res?.items || [];
+          if (items.length > 0) {
+            const mapped = items.map((c: any) => ({
+              id: c.id,
+              contactId: c.contactId,
+              contact: {
+                name: c.contact?.name || c.contact?.phone || 'WhatsApp User',
+                phone: c.contact?.phone || '',
+                email: c.contact?.email || '',
+                tags: (c.contact?.tags || []).map((t: any) => t.name || t),
+                ltv: '—',
+                orders: 0,
+                city: 'WhatsApp Cloud',
+              },
+              status: c.status,
+              unreadCount: c.unreadCount || 0,
+              lastMessagePreview: c.lastMessagePreview || '',
+              lastMessageAt: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+              isWindowActive: Boolean(c.isWindowActive),
+              windowExpiresIn: c.isWindowActive ? 'Active 24h Window' : 'Window Closed',
+              assignedAgent: c.assignedAgent || null,
+            }));
+            setConversations(mapped);
+            setSelectedConvId((prev) => (mapped.some((m: any) => m.id === prev) ? prev : mapped[0].id));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('convoza_access_token') : null;
+    if (token && selectedConvId && !selectedConvId.startsWith('conv-')) {
+      apiFetch<{ items: any[] }>(`/inbox/conversations/${selectedConvId}/messages?limit=50`)
+        .then((res) => {
+          const items = res?.items || [];
+          setMessages(
+            items.map((m: any) => ({
+              id: m.id,
+              direction: m.direction,
+              body: m.body || '',
+              time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+              status: m.status,
+            }))
+          );
+        })
+        .catch(() => {});
+    }
+
     try {
-      const token = localStorage.getItem('convoza_access_token');
-      const socket = io('http://localhost:4000/inbox', {
+      const socket = io(`${getApiOrigin()}/inbox`, {
         auth: { token },
         transports: ['websocket'],
       });
@@ -177,17 +230,10 @@ export default function SharedInboxPage() {
     setMessages([...messages, newMsg]);
     setReplyText('');
 
-    try {
-      fetch(`http://localhost:4000/api/v1/inbox/conversations/${selectedConvId}/reply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('convoza_access_token') || ''}`,
-          'x-organization-id': localStorage.getItem('convoza_org_id') || '',
-        },
-        body: JSON.stringify({ type: 'TEXT', body: newMsg.body }),
-      }).catch(console.error);
-    } catch {}
+    apiFetch(`/inbox/conversations/${selectedConvId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'TEXT', body: newMsg.body }),
+    }).catch(console.error);
   };
 
   const handleAddNote = (e: React.FormEvent) => {

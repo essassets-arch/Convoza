@@ -51,9 +51,12 @@ services:
       DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=30"
       JWT_SECRET: ${JWT_SECRET}
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
-      META_APP_ID: ${META_APP_ID}
+      META_APP_ID: ${META_APP_ID:-4558736907726599}
       META_APP_SECRET: ${META_APP_SECRET}
-      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
+      META_CONFIG_ID: ${META_CONFIG_ID:-}
+      META_HOSTED_ES_URL: ${META_HOSTED_ES_URL:-}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-convoza_meta_verify_token_secure_2026}
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://convoza.emperorsmartsolutions.com}
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,6 +123,8 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.dashboard
+      args:
+        NEXT_PUBLIC_ASSET_PREFIX: /dashboard-assets
     restart: always
     networks:
       - convoza_internal_net
@@ -128,6 +133,8 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.admin
+      args:
+        NEXT_PUBLIC_ASSET_PREFIX: /admin-assets
     restart: always
     networks:
       - convoza_internal_net

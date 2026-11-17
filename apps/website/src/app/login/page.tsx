@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { WhatsAppIcon } from '../../components/WhatsAppIcon';
+import { getApiBaseUrl, buildDashboardRedirectUrl } from '../../lib/api';
 import {
   ArrowRight,
   AlertCircle,
@@ -28,7 +29,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/auth/login', {
+      const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -40,16 +41,25 @@ export default function LoginPage() {
         throw new Error(json.error?.message || 'Login failed. Please check your credentials.');
       }
 
+      const primaryOrg = json.data.organizations?.[0];
+
       // Store tokens and user info
       localStorage.setItem('convoza_access_token', json.data.tokens.accessToken);
       localStorage.setItem('convoza_refresh_token', json.data.tokens.refreshToken);
       localStorage.setItem('convoza_user', JSON.stringify(json.data.user));
-      if (json.data.organizations && json.data.organizations.length > 0) {
-        localStorage.setItem('convoza_org_id', json.data.organizations[0].id);
+      if (primaryOrg) {
+        localStorage.setItem('convoza_org_id', primaryOrg.id);
+        localStorage.setItem('convoza_org_name', primaryOrg.name);
       }
 
-      // Redirect to Dashboard
-      window.location.href = 'http://localhost:3001/dashboard';
+      // Redirect to Dashboard (with cross-port token handoff when on localhost:3000)
+      window.location.href = buildDashboardRedirectUrl({
+        accessToken: json.data.tokens.accessToken,
+        refreshToken: json.data.tokens.refreshToken,
+        user: json.data.user,
+        orgId: primaryOrg?.id,
+        orgName: primaryOrg?.name,
+      });
     } catch (err: any) {
       setError(err.message || 'Network error connecting to API');
     } finally {

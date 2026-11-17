@@ -4,8 +4,10 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InboxGateway } from './inbox.gateway';
+import { decryptSecret, META_CONFIG, buildMetaMessagePayload } from '@convoza/configuration';
 import {
   AssignConversationDto,
   ResolveConversationDto,
@@ -224,7 +226,13 @@ export class InboxService {
       where: { id: conversationId, organizationId },
       include: {
         contact: true,
-        phoneNumber: true,
+        phoneNumber: {
+          include: {
+            whatsappAccount: {
+              include: { credentials: true },
+            },
+          },
+        },
       },
     });
 
@@ -256,7 +264,53 @@ export class InboxService {
       }
     }
 
+    const encryptedToken = conversation.phoneNumber?.whatsappAccount?.credentials?.encryptedToken;
+    const decryptedToken = encryptedToken ? decryptSecret(encryptedToken) : '';
+    const hasLiveMetaToken =
+      Boolean(decryptedToken) &&
+      !decryptedToken.includes('placeholder') &&
+      !decryptedToken.includes('MetaPermanentToken');
+
+    let liveWamid: string | undefined;
+
+    if (hasLiveMetaToken) {
+      const metaPayload = buildMetaMessagePayload({
+        recipientPhone: conversation.contact.phone,
+        type: dto.type,
+        body: dto.body,
+        mediaUrl: dto.mediaUrl,
+        templateName: template?.name,
+        templateLanguage: template?.language,
+        templateCategory: template?.category,
+        templateComponents: (template?.components as any[]) || [],
+        templateParameters: dto.templateParameters || null,
+      });
+
+      try {
+        const metaRes = await axios.post(
+          `${META_CONFIG.GRAPH_API_BASE}/${conversation.phoneNumberId}/messages`,
+          metaPayload,
+          {
+            headers: {
+              Authorization: `Bearer ${decryptedToken}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 12000,
+          }
+        );
+        liveWamid = metaRes.data?.messages?.[0]?.id;
+      } catch (err: any) {
+        const metaErrMsg =
+          err.response?.data?.error?.error_user_msg ||
+          err.response?.data?.error?.message ||
+          err.message;
+        this.logger.error(`Meta Cloud API inbox reply failed: ${metaErrMsg}`);
+        throw new BadRequestException(`Meta Cloud API error: ${metaErrMsg}`);
+      }
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
       const message = await tx.message.create({
         data: {
           organizationId,
@@ -265,42 +319,56 @@ export class InboxService {
           conversationId: conversation.id,
           direction: MessageDirection.OUTBOUND,
           type: dto.type,
-          status: MessageStatus.QUEUED,
-          body: dto.body,
+          status: hasLiveMetaToken ? MessageStatus.SENT : MessageStatus.QUEUED,
+          wamid: liveWamid,
+          sentAt: hasLiveMetaToken ? now : undefined,
+          body: dto.body || (template ? `[Template: ${template.name}]` : undefined),
           templateId: dto.templateId,
           templateParameters: (dto.templateParameters as any) || null,
           mediaUrl: dto.mediaUrl,
         },
       });
 
+      if (hasLiveMetaToken) {
+        await tx.messageStatusEvent.create({
+          data: {
+            messageId: message.id,
+            status: MessageStatus.SENT,
+            timestamp: now,
+          },
+        });
+      } else {
+        // Enqueue to outbox
+        await tx.outboxEvent.create({
+          data: {
+            organizationId,
+            type: JobType.SEND_INDIVIDUAL_MESSAGE,
+            payload: {
+              messageId: message.id,
+              phoneNumberId: conversation.phoneNumberId,
+              recipientPhone: conversation.contact.phone,
+              type: dto.type,
+              body: dto.body,
+              templateName: template?.name,
+              templateLanguage: template?.language,
+              templateCategory: template?.category,
+              templateComponents: template?.components,
+              templateParameters: dto.templateParameters,
+              mediaUrl: dto.mediaUrl,
+            },
+            status: JobStatus.PENDING,
+            idempotencyKey: `reply_${message.id}`,
+          },
+        });
+      }
+
       // Update conversation
       const updatedConv = await tx.conversation.update({
         where: { id: conversation.id },
         data: {
-          lastMessageAt: new Date(),
+          lastMessageAt: now,
           lastMessagePreview: dto.body || (template ? `Template: ${template.name}` : 'Media'),
           status: ConversationStatus.OPEN,
-        },
-      });
-
-      // Enqueue to outbox
-      await tx.outboxEvent.create({
-        data: {
-          organizationId,
-          type: JobType.SEND_INDIVIDUAL_MESSAGE,
-          payload: {
-            messageId: message.id,
-            phoneNumberId: conversation.phoneNumberId,
-            recipientPhone: conversation.contact.phone,
-            type: dto.type,
-            body: dto.body,
-            templateName: template?.name,
-            templateLanguage: template?.language,
-            templateParameters: dto.templateParameters,
-            mediaUrl: dto.mediaUrl,
-          },
-          status: JobStatus.PENDING,
-          idempotencyKey: `reply_${message.id}`,
         },
       });
 

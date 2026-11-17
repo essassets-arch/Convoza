@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Flame,
   Plus,
@@ -23,6 +23,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { WhatsAppChatMockup } from '../../../components/WhatsAppChatMockup';
+import { apiFetch } from '../../../lib/api';
 
 export default function CampaignsPage() {
   const [view, setView] = useState<'list' | 'wizard'>('list');
@@ -85,18 +86,54 @@ export default function CampaignsPage() {
   const [isLaunching, setIsLaunching] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('convoza_access_token') : null;
+    if (!token) return;
+
+    apiFetch<{ items: any[] }>('/campaigns?limit=50')
+      .then((res) => {
+        if (res?.items && res.items.length > 0) {
+          setCampaigns(
+            res.items.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              status: c.status,
+              totalRecipients: c.totalRecipients,
+              sentCount: c.sentCount,
+              deliveredCount: c.deliveredCount,
+              readCount: c.readCount,
+              failedCount: c.failedCount,
+              repliedCount: c.repliedCount,
+              createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'Recently',
+              category: c.template?.category || 'MARKETING',
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+
+    apiFetch<any[]>('/whatsapp/accounts')
+      .then((accs) => {
+        const firstPhone = accs?.[0]?.phoneNumbers?.[0];
+        if (firstPhone?.phoneNumberId) setPhoneNumberId(firstPhone.phoneNumberId);
+      })
+      .catch(() => {});
+
+    apiFetch<{ items: any[] }>('/templates?status=APPROVED&limit=20')
+      .then((res) => {
+        const firstTpl = res?.items?.[0];
+        if (firstTpl?.id) setTemplateId(firstTpl.id);
+      })
+      .catch(() => {});
+  }, []);
+
   const handleLaunchCampaign = async () => {
     setIsLaunching(true);
     setMessage(null);
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/campaigns', {
+      const created = await apiFetch('/campaigns', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('convoza_access_token') || ''}`,
-          'x-organization-id': localStorage.getItem('convoza_org_id') || '',
-        },
         body: JSON.stringify({
           name: campaignName,
           phoneNumberId,
@@ -105,6 +142,10 @@ export default function CampaignsPage() {
           scheduledAt: scheduleType === 'LATER' && scheduledDate ? scheduledDate : undefined,
         }),
       });
+
+      if (scheduleType === 'NOW' && created?.id) {
+        await apiFetch(`/campaigns/${created.id}/start`, { method: 'POST', body: '{}' }).catch(() => {});
+      }
 
       const newCamp = {
         id: `c_${Date.now()}`,

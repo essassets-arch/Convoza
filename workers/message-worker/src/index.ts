@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
-import { decryptSecret, META_CONFIG, WORKER_CONFIG } from '@convoza/configuration';
+import { decryptSecret, META_CONFIG, WORKER_CONFIG, buildMetaMessagePayload } from '@convoza/configuration';
 
 const prisma = new PrismaClient();
 let isRunning = true;
@@ -9,7 +9,7 @@ async function processMessageJob(job: any) {
   const payload = job.payload as any;
   const messageId = payload.messageId;
   const phoneNumberId = payload.phoneNumberId;
-  const recipientPhone = payload.recipientPhone;
+  let recipientPhone = payload.recipientPhone;
 
   // Retrieve phone number and credentials
   const phone = await prisma.phoneNumber.findUnique({
@@ -21,41 +21,33 @@ async function processMessageJob(job: any) {
     },
   });
 
-  if (!phone || !phone.whatsappAccount || !phone.whatsappAccount.credentials) {
-    throw new Error(`Phone number ${phoneNumberId} or credentials not found`);
+  if (!phone || !phone.whatsappAccount) {
+    throw new Error(`Phone number ${phoneNumberId} not found`);
   }
 
-  const token = decryptSecret(phone.whatsappAccount.credentials.encryptedToken);
-
-  // Construct Meta WhatsApp Business API payload
-  let metaPayload: any = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: recipientPhone.replace(/[^\d]/g, ''),
-  };
-
-  if (payload.type === 'TEMPLATE') {
-    metaPayload.type = 'template';
-    metaPayload.template = {
-      name: payload.templateName,
-      language: { code: payload.templateLanguage || 'en_US' },
-    };
-
-    if (payload.templateParameters && Object.keys(payload.templateParameters).length > 0) {
-      metaPayload.template.components = [
-        {
-          type: 'body',
-          parameters: Object.entries(payload.templateParameters).map(([_, val]) => ({
-            type: 'text',
-            text: String(val),
-          })),
-        },
-      ];
-    }
-  } else {
-    metaPayload.type = 'text';
-    metaPayload.text = { body: payload.body || '' };
+  if (!recipientPhone && messageId) {
+    const existingMsg = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: { contact: true },
+    });
+    recipientPhone = existingMsg?.contact?.phone || '';
   }
+
+  const token = phone.whatsappAccount.credentials?.encryptedToken
+    ? decryptSecret(phone.whatsappAccount.credentials.encryptedToken)
+    : '';
+
+  const metaPayload = buildMetaMessagePayload({
+    recipientPhone,
+    type: payload.type,
+    body: payload.body,
+    mediaUrl: payload.mediaUrl,
+    templateName: payload.templateName,
+    templateLanguage: payload.templateLanguage,
+    templateCategory: payload.templateCategory,
+    templateComponents: payload.templateComponents || [],
+    templateParameters: payload.templateParameters || null,
+  });
 
   let wamid = `wamid_sim_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -75,7 +67,7 @@ async function processMessageJob(job: any) {
       );
       wamid = response.data?.messages?.[0]?.id || wamid;
     } catch (err: any) {
-      const errMsg = err.response?.data?.error?.message || err.message;
+      const errMsg = err.response?.data?.error?.error_user_msg || err.response?.data?.error?.message || err.message;
       throw new Error(`Meta API error: ${errMsg}`);
     }
   }

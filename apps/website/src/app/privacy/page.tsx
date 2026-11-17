@@ -70,7 +70,7 @@ export default function PrivacyPolicyPage() {
           </h1>
 
           <p className="mt-3.5 text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            How CONVOZA Technologies Inc. safeguards customer personal data, phone numbers, and WhatsApp communication payloads under official Meta Business Platform standards.
+            How Emperor Smart Solutions (operating CONVOZA) safeguards customer personal data, phone numbers, and WhatsApp communication payloads under official Meta Business Platform standards.
           </p>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500">
@@ -220,10 +220,10 @@ export default function PrivacyPolicyPage() {
                 </h2>
               </div>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                CONVOZA Technologies Inc. (&ldquo;CONVOZA&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) provides an enterprise Software-as-a-Service (SaaS) platform facilitating multi-agent customer communication, marketing broadcasts, and workflow automation on the official WhatsApp Business Platform.
+                Emperor Smart Solutions (&ldquo;CONVOZA&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) provides an enterprise Software-as-a-Service (SaaS) platform facilitating multi-agent customer communication, marketing broadcasts, and workflow automation on the official WhatsApp Business Platform.
               </p>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                This Privacy Policy describes our practices regarding personal data collected through our website (<code className="text-emerald-700 font-mono text-xs">convoza.com</code>), dashboard applications, REST APIs, and webhook processors. When an organization utilizes our services to message end-customers on WhatsApp, the organization acts as the <strong>Data Controller</strong>, and CONVOZA serves as the <strong>Data Processor</strong>.
+                This Privacy Policy describes our practices regarding personal data collected through our website (<code className="text-emerald-700 font-mono text-xs">convoza.emperorsmartsolutions.com</code>), dashboard applications, REST APIs, and webhook processors. When an organization utilizes our services to message end-customers on WhatsApp, the organization acts as the <strong>Data Controller</strong>, and Emperor Smart Solutions (operating CONVOZA) serves as the <strong>Data Processor</strong>.
               </p>
             </section>
 
@@ -427,6 +427,32 @@ export default function PrivacyPolicyPage() {
                 <p>Legal Desk: <a href="mailto:legal@convoza.com" className="text-emerald-700 font-bold hover:underline">legal@convoza.com</a></p>
                 <p>Response SLA: Statutory response within 48 business hours.</p>
               </div>
+            </section>
+
+            {/* Section 9: Meta Platform User Data Deletion Instructions */}
+            <section id="data-deletion" className="space-y-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 font-black text-xs flex items-center justify-center">
+                  9
+                </span>
+                <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                  User Data Deletion Instructions (Meta Platform &amp; WhatsApp Cloud API)
+                </h2>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                In accordance with Meta Platform Terms, business administrators and WhatsApp end-users may revoke permissions and permanently delete stored data at any time using any of the following methods:
+              </p>
+              <ol className="list-decimal list-inside space-y-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <li>
+                  <strong>Self-Service Dashboard Disconnection:</strong> Log in to your CONVOZA Dashboard &rarr; <strong>WhatsApp Phone Numbers</strong> &rarr; click the <strong>Disconnect / Delete</strong> icon next to your connected WhatsApp Business Account (WABA). All encrypted Meta access tokens, phone number bindings, and webhook subscriptions are immediately purged.
+                </li>
+                <li>
+                  <strong>Revoke via Facebook / Meta Business Settings:</strong> Open your Facebook or Meta Business Portfolio Settings &rarr; <strong>Business Integrations</strong> &rarr; locate <strong>CONVOZA</strong> and click <strong>Remove</strong>.
+                </li>
+                <li>
+                  <strong>Direct Erasure Request (48-Hour Guarantee):</strong> Email <a href="mailto:privacy@emperorsmartsolutions.com" className="text-emerald-700 font-bold hover:underline">privacy@emperorsmartsolutions.com</a> (or <a href="mailto:privacy@convoza.com" className="text-emerald-700 font-bold hover:underline">privacy@convoza.com</a>) with subject line <code className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">DATA DELETION REQUEST</code> along with your registered organization email or WhatsApp phone number. All associated account records, contact entries, and message logs are permanently erased within 48 hours and confirmed via email.
+                </li>
+              </ol>
             </section>
 
           </div>

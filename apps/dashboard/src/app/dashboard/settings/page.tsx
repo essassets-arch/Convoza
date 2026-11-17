@@ -295,10 +295,10 @@ export default function SettingsPage() {
               <span className="text-[10px] text-slate-400 font-mono">POST /api/v1/messages/send</span>
             </div>
             <pre className="p-3 bg-slate-950 rounded-xl text-[11px] font-mono text-emerald-300 overflow-x-auto leading-relaxed border border-slate-800">
-{`curl -X POST http://localhost:4000/api/v1/messages/send \\
-  -H "Authorization: Bearer cvz_live_..." \\
+{`curl -X POST https://convoza.emperorsmartsolutions.com/api/v1/messages/send \\
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \\
   -H "Content-Type: application/json" \\
-  -d '{"recipientPhone": "+919876540001", "type": "TEMPLATE", "templateId": "order_confirmation_v1"}'`}
+  -d '{"phoneNumberId": "<PHONE_ID>", "recipientPhone": "+919876540001", "type": "TEMPLATE", "templateId": "<TEMPLATE_UUID>"}'`}
             </pre>
           </div>
         </div>
