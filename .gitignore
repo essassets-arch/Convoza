@@ -13,11 +13,17 @@ dist/
 # Prisma
 generated/
 
-# Environment
-.env.local
-.env.production
-*.env.backup
+# Environment & Secrets (Never commit credentials)
 .env
+.env.*
+!.env.example
+*.env
+*.env.*
+*.env.backup
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Logs & Debug
 logs
