@@ -72,9 +72,9 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
-  const [orgName, setOrgName] = useState('Apex Global Retail');
-  const [phoneDisplay, setPhoneDisplay] = useState('+91 98765 43210');
-  const [phoneTier, setPhoneTier] = useState('Meta Tier 10K (High Quality)');
+  const [orgName, setOrgName] = useState('Workspace');
+  const [phoneDisplay, setPhoneDisplay] = useState('Not Connected');
+  const [phoneTier, setPhoneTier] = useState('Connect Official WABA');
 
   useEffect(() => {
     try {
@@ -84,16 +84,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
       if (token) {
         apiFetch<any[]>('/whatsapp/accounts')
           .then((accounts) => {
-            const p = accounts?.[0]?.phoneNumbers?.[0];
+            const list = Array.isArray(accounts) ? accounts : [];
+            const p = list.flatMap((a: any) => a?.phoneNumbers || [])[0];
             if (p) {
               setPhoneDisplay(p.displayPhoneNumber);
               setPhoneTier(`Meta ${p.messagingLimitTier || 'TIER_1K'} (${p.qualityRating || 'GREEN'})`);
+            } else {
+              setPhoneDisplay('No Active Number');
+              setPhoneTier('Connect Official WABA');
             }
           })
           .catch(() => {});
       }
     } catch {}
-  }, []);
+  }, [pathname]);
 
   return (
     <>

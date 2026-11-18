@@ -1,12 +1,11 @@
 services:
-  # Edge Nginx Reverse Proxy & Load Balancer
+  # Edge Nginx Reverse Proxy for Convoza Stack (Bound to 127.0.0.1:8090 for Host Nginx SSL Termination)
   nginx:
     image: nginx:alpine
-    container_name: convoza_prod_nginx
+    container_name: convoza-nginx
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - "${CONVOZA_HOST_BIND:-127.0.0.1:8090}:80"
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -15,13 +14,12 @@ services:
       - dashboard
       - admin
     networks:
-      - convoza_public_net
-      - convoza_internal_net
+      - convoza_net
 
-  # PostgreSQL Database (Internal Network Only)
+  # PostgreSQL 16 Database (Unexposed to Host Ports)
   postgres:
     image: postgres:16-alpine
-    container_name: convoza_prod_postgres
+    container_name: convoza-postgres
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-convoza_user}
@@ -30,122 +28,133 @@ services:
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U convoza_user -d convoza_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-convoza_user} -d ${DB_NAME:-convoza_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - convoza_internal_net
+      - convoza_net
 
-  # NestJS API Replicas
+  # NestJS Core API & Socket.IO Server
   api:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: convoza-api
     restart: always
-    deploy:
-      replicas: 2
     environment:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=30"
-      JWT_SECRET: ${JWT_SECRET}
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET:-super-secret-convoza-jwt-access-token-key-2026}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-super-secret-convoza-refresh-token-key-2026}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-convoza-super-secret-master-key-32b}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v20.0}
       META_APP_ID: ${META_APP_ID:-4558736907726599}
-      META_APP_SECRET: ${META_APP_SECRET}
+      META_APP_SECRET: ${META_APP_SECRET:-convoza_meta_app_secret_placeholder}
       META_CONFIG_ID: ${META_CONFIG_ID:-}
       META_HOSTED_ES_URL: ${META_HOSTED_ES_URL:-}
       META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-convoza_meta_verify_token_secure_2026}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://convoza.emperorsmartsolutions.com}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_convoza_key_id}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-rzp_test_convoza_key_secret}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-convoza_razorpay_webhook_secret_2026}
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - convoza_internal_net
+      - convoza_net
 
-  # Asynchronous Message Worker
+  # Asynchronous Message Worker (Outbound Meta Graph API Dispatcher)
   message-worker:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.message-worker
+    container_name: convoza-message-worker
     restart: always
-    deploy:
-      replicas: 2
     environment:
       NODE_ENV: production
       DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=15"
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-convoza-super-secret-master-key-32b}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v20.0}
     depends_on:
-      postgres:
+      api:
         condition: service_healthy
     networks:
-      - convoza_internal_net
+      - convoza_net
 
   # Bulk Campaign Worker
   campaign-worker:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.campaign-worker
+    container_name: convoza-campaign-worker
     restart: always
     environment:
       NODE_ENV: production
       DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=15"
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-convoza-super-secret-master-key-32b}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v20.0}
     depends_on:
-      postgres:
+      api:
         condition: service_healthy
     networks:
-      - convoza_internal_net
+      - convoza_net
 
-  # Webhook Worker
+  # Webhook Reconciliation Worker
   webhook-worker:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.webhook-worker
+    container_name: convoza-webhook-worker
     restart: always
     environment:
       NODE_ENV: production
       DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=15"
     depends_on:
-      postgres:
+      api:
         condition: service_healthy
     networks:
-      - convoza_internal_net
+      - convoza_net
 
+  # Public Marketing Website
   website:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.website
+    container_name: convoza-website
     restart: always
     networks:
-      - convoza_internal_net
+      - convoza_net
 
+  # Customer Workspace Dashboard
   dashboard:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.dashboard
       args:
         NEXT_PUBLIC_ASSET_PREFIX: /dashboard-assets
+    container_name: convoza-dashboard
     restart: always
     networks:
-      - convoza_internal_net
+      - convoza_net
 
+  # Super Admin Control Plane
   admin:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.admin
       args:
         NEXT_PUBLIC_ASSET_PREFIX: /admin-assets
+    container_name: convoza-admin
     restart: always
     networks:
-      - convoza_internal_net
+      - convoza_net
 
 volumes:
   postgres_prod_data:
     driver: local
 
 networks:
-  convoza_public_net:
+  convoza_net:
     driver: bridge
-  convoza_internal_net:
-    internal: true
-

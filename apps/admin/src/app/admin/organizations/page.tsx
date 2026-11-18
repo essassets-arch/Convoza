@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { adminFetch } from '../../../lib/api';
 import {
   Building2,
   Search,
@@ -80,9 +81,38 @@ export default function AdminOrganizationsPage() {
   const [suspendReason, setSuspendReason] = useState('Violation of WhatsApp acceptable use policy');
   const [message, setMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    adminFetch<{ items: any[] }>('/admin/organizations?limit=100')
+      .then((res) => {
+        if (res?.items && res.items.length > 0) {
+          setOrgs(
+            res.items.map((o: any) => ({
+              id: o.id,
+              name: o.name,
+              slug: o.slug,
+              plan: o.subscription?.plan?.name || 'Starter Plan',
+              phoneNumbersCount: o._count?.phoneNumbers ?? 0,
+              contactsCount: o._count?.contacts ?? 0,
+              isSuspended: Boolean(o.isSuspended),
+              suspensionReason: o.suspensionReason || null,
+              createdAt: o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : '',
+              ownerEmail: o.slug + '@tenant',
+              monthlyVolume: String(o._count?.messages ?? 0),
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSuspend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrgForSuspend) return;
+
+    await adminFetch(`/admin/organizations/${selectedOrgForSuspend.id}/suspend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason: suspendReason }),
+    }).catch(() => {});
 
     setOrgs(
       orgs.map((o) =>
@@ -95,7 +125,11 @@ export default function AdminOrganizationsPage() {
     setSelectedOrgForSuspend(null);
   };
 
-  const handleRestore = (orgId: string) => {
+  const handleRestore = async (orgId: string) => {
+    await adminFetch(`/admin/organizations/${orgId}/restore`, {
+      method: 'PATCH',
+      body: '{}',
+    }).catch(() => {});
     setOrgs(
       orgs.map((o) =>
         o.id === orgId ? { ...o, isSuspended: false, suspensionReason: null } : o

@@ -1,18 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="adminGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#E11D48" />
-      <stop offset="50%" stop-color="#BE123C" />
-      <stop offset="100%" stop-color="#881337" />
+    <linearGradient id="convozaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="55%" stop-color="#0D9488" />
+      <stop offset="100%" stop-color="#042F2E" />
     </linearGradient>
-    <filter id="softShadow" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.4" />
-    </filter>
   </defs>
-  <rect width="512" height="512" rx="118" fill="url(#adminGrad)" />
-  <rect x="6" y="6" width="500" height="500" rx="112" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="8" />
-  <g transform="translate(106, 106) scale(12.5)" filter="url(#softShadow)">
-    <path fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-    <path fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4" />
+  <rect width="512" height="512" rx="118" fill="url(#convozaGrad)" />
+  <rect x="8" y="8" width="496" height="496" rx="110" fill="none" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="8" />
+  <g transform="translate(88, 88) scale(14)" fill="#FFFFFF">
+    <path d="M12 2.5A9.5 9.5 0 1 0 19.42 17.94a1.65 1.65 0 0 0-2.58-2.06A6.2 6.2 0 1 1 16.84 8.12a1.65 1.65 0 1 0 2.58-2.06A9.46 9.46 0 0 0 12 2.5Z" />
+    <path d="M11.75 9.75a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm7.5 0a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm-6.5 1.35h5.5v1.8h-5.5v-1.8Z" />
   </g>
 </svg>

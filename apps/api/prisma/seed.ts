@@ -325,48 +325,60 @@ async function main() {
         update: {},
       });
 
-      await prisma.message.create({
-        data: {
-          organizationId: demoOrg.id,
-          phoneNumberId: phoneNumber.phoneNumberId,
-          contactId: contact.id,
-          conversationId: conv.id,
-          direction: MessageDirection.INBOUND,
-          type: MessageType.TEXT,
-          status: MessageStatus.DELIVERED,
-          wamid: `wamid_inbound_${crypto.randomBytes(6).toString('hex')}`,
-          body: 'Could you confirm when order #APX-4912 will be delivered?',
-        },
+      const existingMessagesCount = await prisma.message.count({
+        where: { conversationId: conv.id },
       });
 
-      await prisma.internalNote.create({
-        data: {
-          conversationId: conv.id,
-          userId: demoOwner.id,
-          content: 'Checked tracking portal. Carrier ETA is tomorrow morning.',
-        },
-      });
+      if (existingMessagesCount === 0) {
+        await prisma.message.create({
+          data: {
+            organizationId: demoOrg.id,
+            phoneNumberId: phoneNumber.phoneNumberId,
+            contactId: contact.id,
+            conversationId: conv.id,
+            direction: MessageDirection.INBOUND,
+            type: MessageType.TEXT,
+            status: MessageStatus.DELIVERED,
+            wamid: `wamid_inbound_${crypto.randomBytes(6).toString('hex')}`,
+            body: 'Could you confirm when order #APX-4912 will be delivered?',
+          },
+        });
+
+        await prisma.internalNote.create({
+          data: {
+            conversationId: conv.id,
+            userId: demoOwner.id,
+            content: 'Checked tracking portal. Carrier ETA is tomorrow morning.',
+          },
+        });
+      }
     }
   }
 
-  // 7. Seed Demo Campaign
-  await prisma.campaign.create({
-    data: {
-      organizationId: demoOrg.id,
-      phoneNumberId: phoneNumber.phoneNumberId,
-      templateId: template2.id,
-      name: 'Weekend VIP Flash Sale Announcement',
-      status: 'COMPLETED',
-      totalRecipients: 500,
-      sentCount: 500,
-      deliveredCount: 489,
-      readCount: 412,
-      failedCount: 11,
-      repliedCount: 84,
-      startedAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
-      completedAt: new Date(Date.now() - 47 * 60 * 60 * 1000),
-    },
+  // 7. Seed Demo Campaign (idempotent)
+  const existingCampaigns = await prisma.campaign.count({
+    where: { organizationId: demoOrg.id },
   });
+
+  if (existingCampaigns === 0) {
+    await prisma.campaign.create({
+      data: {
+        organizationId: demoOrg.id,
+        phoneNumberId: phoneNumber.phoneNumberId,
+        templateId: template2.id,
+        name: 'Weekend VIP Flash Sale Announcement',
+        status: 'COMPLETED',
+        totalRecipients: 500,
+        sentCount: 500,
+        deliveredCount: 489,
+        readCount: 412,
+        failedCount: 11,
+        repliedCount: 84,
+        startedAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        completedAt: new Date(Date.now() - 47 * 60 * 60 * 1000),
+      },
+    });
+  }
 
   console.log('CONVOZA database seeded successfully!');
   console.log('Super Admin Login: admin@convoza.io / Admin@Convoza2026!');

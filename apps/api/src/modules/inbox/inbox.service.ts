@@ -179,10 +179,12 @@ export class InboxService {
   async getConversationMessages(
     organizationId: string,
     conversationId: string,
-    page = 1,
-    limit = 50
+    page?: number,
+    limit?: number
   ) {
-    const skip = (Math.max(1, page) - 1) * limit;
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(200, Math.max(1, Number(limit) || 100));
+    const skip = (safePage - 1) * safeLimit;
 
     const conversation = await this.prisma.conversation.findFirst({
       where: { id: conversationId, organizationId },
@@ -192,26 +194,28 @@ export class InboxService {
       throw new NotFoundException('Conversation not found');
     }
 
-    const [total, messages] = await Promise.all([
+    const [total, latestMessages] = await Promise.all([
       this.prisma.message.count({ where: { conversationId } }),
       this.prisma.message.findMany({
         where: { conversationId },
         skip,
-        take: limit,
-        orderBy: { createdAt: 'asc' },
+        take: safeLimit,
+        orderBy: { createdAt: 'desc' },
         include: {
           statusEvents: { orderBy: { timestamp: 'asc' } },
         },
       }),
     ]);
 
+    const messages = [...latestMessages].reverse();
+
     return {
       items: messages,
       meta: {
-        page,
-        limit,
+        page: safePage,
+        limit: safeLimit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }

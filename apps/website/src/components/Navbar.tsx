@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import {
@@ -18,12 +18,40 @@ import {
   ShieldCheck,
   Zap,
   SlidersHorizontal,
+  LayoutDashboard,
+  LogOut,
 } from 'lucide-react';
 
 export const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [solutionsOpen, setSolutionsOpen] = useState(false);
+  const [loggedUser, setLoggedUser] = useState<{ name?: string; email?: string; isSuperAdmin?: boolean } | null>(null);
+  const [dashboardHref, setDashboardHref] = useState('/dashboard');
+  const [adminHref, setAdminHref] = useState('/admin');
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('convoza_access_token');
+      const rawUser = localStorage.getItem('convoza_user');
+      if (token && rawUser) {
+        setLoggedUser(JSON.parse(rawUser));
+      }
+      if (window.location.port === '3000') {
+        setDashboardHref(`${window.location.protocol}//${window.location.hostname}:3001/dashboard`);
+        setAdminHref(`${window.location.protocol}//${window.location.hostname}:3002/admin`);
+      }
+    } catch {}
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('convoza_access_token');
+    localStorage.removeItem('convoza_refresh_token');
+    localStorage.removeItem('convoza_user');
+    localStorage.removeItem('convoza_org_id');
+    localStorage.removeItem('convoza_org_name');
+    setLoggedUser(null);
+  };
 
   const handleMouseEnter = () => {
     if (closeTimeoutRef.current) {
@@ -203,18 +231,49 @@ export const Navbar = () => {
 
           {/* Action Buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-semibold text-slate-200 hover:text-white px-3.5 py-2 rounded-lg hover:bg-emerald-950/40 transition-colors"
-            >
-              Login
-            </Link>
-            <Link
-              href="/register"
-              className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 px-5 py-2.5 rounded-lg shadow-md shadow-emerald-500/25 hover:shadow-lg transition-all"
-            >
-              Get Started <ArrowRight className="w-4 h-4" />
-            </Link>
+            {loggedUser ? (
+              <>
+                {loggedUser.isSuperAdmin && (
+                  <a
+                    href={adminHref}
+                    className="text-xs font-bold text-rose-300 bg-rose-950/60 border border-rose-500/40 px-3 py-2 rounded-lg hover:bg-rose-900/60 transition-colors"
+                  >
+                    Root Admin
+                  </a>
+                )}
+                <a
+                  href={dashboardHref}
+                  className="inline-flex items-center gap-2 text-sm font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 px-4 py-2.5 rounded-lg shadow-md shadow-emerald-500/25 transition-all"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Dashboard</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title={`Sign out (${loggedUser.email || ''})`}
+                  className="p-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-emerald-950/60 border border-emerald-900/60 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm font-semibold text-slate-200 hover:text-white px-3.5 py-2 rounded-lg hover:bg-emerald-950/40 transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/register"
+                  className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 px-5 py-2.5 rounded-lg shadow-md shadow-emerald-500/25 hover:shadow-lg transition-all"
+                >
+                  Get Started <ArrowRight className="w-4 h-4" />
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -279,20 +338,44 @@ export const Navbar = () => {
             Contact & Support
           </Link>
           <div className="pt-4 border-t border-emerald-900/60 flex flex-col gap-2">
-            <Link
-              href="/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center py-2.5 text-slate-200 font-semibold rounded-lg bg-emerald-950/60 border border-emerald-800/50"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/register"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center py-2.5 text-slate-950 font-bold rounded-lg bg-emerald-400 shadow-md"
-            >
-              Start Free Trial
-            </Link>
+            {loggedUser ? (
+              <>
+                <a
+                  href={dashboardHref}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center py-2.5 text-slate-950 font-bold rounded-lg bg-emerald-400 shadow-md"
+                >
+                  Open Dashboard →
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleLogout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-center py-2.5 text-slate-200 font-semibold rounded-lg bg-emerald-950/60 border border-emerald-800/50"
+                >
+                  Sign Out ({loggedUser.name || loggedUser.email})
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center py-2.5 text-slate-200 font-semibold rounded-lg bg-emerald-950/60 border border-emerald-800/50"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center py-2.5 text-slate-950 font-bold rounded-lg bg-emerald-400 shadow-md"
+                >
+                  Start Free Trial
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

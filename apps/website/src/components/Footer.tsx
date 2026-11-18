@@ -71,12 +71,12 @@ export const Footer = () => {
               Enterprise-grade WhatsApp Business Automation platform for high-growth brands, e-commerce retailers, and multi-agent customer service teams. Built exclusively on the official Meta WhatsApp Cloud API.
             </p>
 
-            {/* Official Meta Tech Partner Pill */}
+            {/* Official Cloud API Pill */}
             <div className="inline-flex items-center gap-2 text-xs text-emerald-300 bg-emerald-950/80 border border-emerald-800/60 px-3.5 py-1.5 rounded-full shadow-2xs">
-              <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366] shrink-0" />
-              <span className="font-bold">Official Meta Tech Partner</span>
+              <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-400 shrink-0" />
+              <span className="font-bold">Official WhatsApp Cloud API</span>
               <span className="text-emerald-600">•</span>
-              <span className="text-emerald-400/80 font-medium">Direct Provider</span>
+              <span className="text-emerald-400/80 font-medium">Graph API v20.0</span>
             </div>
 
             {/* Direct Support Desk CTA */}
@@ -362,16 +362,21 @@ export const Footer = () => {
         {/* ============================================================== */}
         <div className="pt-7 flex flex-col md:flex-row items-center justify-between text-xs text-slate-500 gap-4">
           
-          <div className="flex items-center gap-2 text-center md:text-left">
-            <span>© {new Date().getFullYear()} Emperor Smart Solutions. All rights reserved.</span>
+          <div className="space-y-1 text-center md:text-left max-w-2xl">
+            <div className="flex items-center justify-center md:justify-start gap-2">
+              <span>© {new Date().getFullYear()} Emperor Smart Solutions. All rights reserved.</span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              CONVOZA is an independent business software platform operated by Emperor Smart Solutions and is not affiliated with, endorsed by, or sponsored by WhatsApp LLC or Meta Platforms, Inc. WhatsApp™ is a registered trademark of WhatsApp LLC.
+            </p>
           </div>
 
           <div className="flex items-center gap-4 sm:gap-6 flex-wrap justify-center">
             
-            {/* Official Meta Partner Pill */}
+            {/* Cloud API Status Pill */}
             <div className="inline-flex items-center gap-2 text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-semibold text-slate-300">Official Meta Business Partner</span>
+              <span className="font-semibold text-slate-300">Built on Official WhatsApp Cloud API</span>
             </div>
 
             {/* Scroll to Top Button */}

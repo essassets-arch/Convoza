@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { apiFetch, getWebsiteUrl } from '../lib/api';
 import {
   Building2,
@@ -24,10 +25,11 @@ interface TopNavProps {
 }
 
 export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
+  const pathname = usePathname();
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
-  const [orgName, setOrgName] = useState('Apex Global Retail');
-  const [primaryPhone, setPrimaryPhone] = useState('+91 98765 43210');
-  const [primaryRating, setPrimaryRating] = useState('HIGH Quality (Tier 10K)');
+  const [orgName, setOrgName] = useState('Workspace');
+  const [primaryPhone, setPrimaryPhone] = useState('Not Connected');
+  const [primaryRating, setPrimaryRating] = useState('Connect WABA');
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -63,16 +65,20 @@ export const TopNav: React.FC<TopNavProps> = ({ onToggleSidebar }) => {
 
         apiFetch<any[]>('/whatsapp/accounts')
           .then((accounts) => {
-            const firstPhone = accounts?.[0]?.phoneNumbers?.[0];
+            const list = Array.isArray(accounts) ? accounts : [];
+            const firstPhone = list.flatMap((a: any) => a?.phoneNumbers || [])[0];
             if (firstPhone) {
               setPrimaryPhone(firstPhone.displayPhoneNumber);
               setPrimaryRating(`${firstPhone.qualityRating || 'GREEN'} (${firstPhone.messagingLimitTier || 'TIER_1K'})`);
+            } else {
+              setPrimaryPhone('No Active Number');
+              setPrimaryRating('Setup WABA');
             }
           })
           .catch(() => {});
       }
     } catch {}
-  }, []);
+  }, [pathname]);
 
   const handleLogout = () => {
     localStorage.clear();

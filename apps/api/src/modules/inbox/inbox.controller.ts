@@ -39,19 +39,19 @@ export class InboxController {
     @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('assignedTo') assignedTo?: string,
-    @Query('unreadOnly') unreadOnly?: boolean,
+    @Query('unreadOnly') unreadOnly?: string,
     @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number
+    @Query('page') page?: string,
+    @Query('limit') limit?: string
   ) {
     return this.inboxService.getConversations(org.id, {
       status,
       assignedTo,
-      unreadOnly,
+      unreadOnly: unreadOnly === 'true',
       search,
       currentUserId: user.id,
-      page,
-      limit,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 25,
     });
   }
 
@@ -68,10 +68,15 @@ export class InboxController {
   async getMessages(
     @CurrentOrg() org: any,
     @Param('id') id: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number
+    @Query('page') page?: string,
+    @Query('limit') limit?: string
   ) {
-    return this.inboxService.getConversationMessages(org.id, id, page, limit);
+    return this.inboxService.getConversationMessages(
+      org.id,
+      id,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 100
+    );
   }
 
   @Post('conversations/:id/reply')

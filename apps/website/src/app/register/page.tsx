@@ -117,8 +117,8 @@ export default function RegisterPage() {
             <div>
               {/* Official Meta Partner Pill */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-semibold mb-5 shadow-2xs">
-                <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                <span className="uppercase tracking-[0.16em] text-[10.5px] font-bold">Official Meta Tech Partner</span>
+                <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
+                <span className="uppercase tracking-[0.16em] text-[10.5px] font-bold">Official WhatsApp Cloud API</span>
                 <span className="text-emerald-300">•</span>
                 <span className="text-emerald-700 font-medium">14-Day Free Trial</span>
               </div>
@@ -198,7 +198,7 @@ export default function RegisterPage() {
                 </div>
                 <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Verified Meta Partner</span>
+                  <span>Cloud API Verified</span>
                 </div>
               </div>
             </div>

@@ -13,13 +13,26 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     consumeAuthHandoffFromHash();
-  }, []);
+    if (pathname !== '/dashboard/login') {
+      const token = localStorage.getItem('convoza_access_token');
+      if (!token) {
+        window.location.replace('/dashboard/login');
+        return;
+      }
+    }
+    setAuthChecked(true);
+  }, [pathname]);
 
   if (pathname === '/dashboard/login') {
     return <>{children}</>;
+  }
+
+  if (!authChecked) {
+    return <div className="min-h-screen bg-slate-50" />;
   }
 
   return (

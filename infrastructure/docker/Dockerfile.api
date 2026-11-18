@@ -23,6 +23,7 @@ RUN npm run build --workspace=@convoza/validation
 WORKDIR /app/apps/api
 RUN npx prisma generate
 RUN npm run build
+RUN npx tsc prisma/seed.ts --outDir dist/prisma --module commonjs --target es2021 --esModuleInterop --skipLibCheck
 
 # Stage 2: Production Runner
 FROM node:20-alpine AS runner
@@ -47,7 +48,7 @@ USER nestjs
 
 EXPOSE 4000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=20s --timeout=5s --start-period=25s --retries=5 \
   CMD curl -f http://localhost:4000/api/v1/health || exit 1
 
-CMD ["sh", "-c", "if [ -f apps/api/dist/main.js ]; then node apps/api/dist/main.js; else node apps/api/dist/src/main.js; fi"]
+CMD ["sh", "-c", "node ./node_modules/prisma/build/index.js db push --schema=apps/api/prisma/schema.prisma --skip-generate && node apps/api/dist/prisma/seed.js && if [ -f apps/api/dist/main.js ]; then node apps/api/dist/main.js; else node apps/api/dist/src/main.js; fi"]

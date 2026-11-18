@@ -53,6 +53,14 @@ export class WebhooksService {
           }
         }
 
+        // 2b. Process WhatsApp Business App Coexistence Echoes (smb_message_echoes)
+        if (val.message_echoes && Array.isArray(val.message_echoes)) {
+          const metadata = val.metadata;
+          for (const echoObj of val.message_echoes) {
+            await this.handleMessageEcho(metadata, echoObj);
+          }
+        }
+
         // 3. Process Template Approval / Status Updates from Meta
         if (change.field === 'message_template_status_update' && val.message_template_id) {
           await this.handleTemplateStatusUpdate(String(val.message_template_id), val.event, val.reason);
@@ -233,13 +241,24 @@ export class WebhooksService {
       },
     });
 
-    // Broadcast new message to shared inbox real-time room
+    // Broadcast new message & conversation update to shared inbox real-time room
     this.inboxGateway.broadcastNewMessage(orgId, {
       ...message,
       contact: {
         id: contact.id,
         name: contact.name,
         phone: contact.phone,
+      },
+    });
+
+    this.inboxGateway.broadcastConversationUpdate(orgId, {
+      ...conversation,
+      isWindowActive: true,
+      contact: {
+        id: contact.id,
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
       },
     });
 
@@ -270,6 +289,87 @@ export class WebhooksService {
       },
     });
     this.logger.log(`Template ${metaTemplateId} status updated via Meta webhook -> ${mappedStatus}`);
+  }
+
+  /**
+   * Handle WhatsApp Business App Coexistence outbound message echoes (smb_message_echoes)
+   */
+  private async handleMessageEcho(metadata: any, echoObj: any) {
+    const phoneNumberId = metadata?.phone_number_id;
+    if (!phoneNumberId || !echoObj?.to) return;
+
+    const phoneRecord = await this.prisma.phoneNumber.findUnique({
+      where: { phoneNumberId },
+    });
+    if (!phoneRecord) return;
+
+    const orgId = phoneRecord.organizationId;
+    const recipientPhone = '+' + String(echoObj.to).replace(/[^\d]/g, '');
+    const body = echoObj.text?.body || `[${(echoObj.type || 'MEDIA').toUpperCase()}]`;
+
+    const contact = await this.prisma.contact.upsert({
+      where: {
+        organizationId_phone: {
+          organizationId: orgId,
+          phone: recipientPhone,
+        },
+      },
+      create: {
+        organizationId: orgId,
+        phone: recipientPhone,
+        consentStatus: 'OPTED_IN',
+        consentSource: 'WHATSAPP_INBOUND',
+      },
+      update: {},
+    });
+
+    const conversation = await this.prisma.conversation.upsert({
+      where: {
+        organizationId_phoneNumberId_contactId: {
+          organizationId: orgId,
+          phoneNumberId,
+          contactId: contact.id,
+        },
+      },
+      create: {
+        organizationId: orgId,
+        phoneNumberId,
+        contactId: contact.id,
+        status: ConversationStatus.OPEN,
+        lastMessageAt: new Date(),
+        lastMessagePreview: body,
+      },
+      update: {
+        lastMessageAt: new Date(),
+        lastMessagePreview: body,
+      },
+    });
+
+    if (echoObj.id) {
+      const exists = await this.prisma.message.findUnique({ where: { wamid: echoObj.id } });
+      if (exists) return;
+    }
+
+    const message = await this.prisma.message.create({
+      data: {
+        organizationId: orgId,
+        phoneNumberId,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        direction: MessageDirection.OUTBOUND,
+        type: MessageType.TEXT,
+        status: MessageStatus.SENT,
+        wamid: echoObj.id,
+        body,
+        sentAt: new Date(),
+      },
+    });
+
+    this.inboxGateway.broadcastNewMessage(orgId, message);
+    this.inboxGateway.broadcastConversationUpdate(orgId, {
+      ...conversation,
+      contact: { id: contact.id, name: contact.name, phone: contact.phone },
+    });
   }
 }
 

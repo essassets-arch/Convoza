@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { adminFetch } from '../../lib/api';
 import {
   Users,
   Building2,
@@ -51,6 +52,20 @@ export default function SuperAdminDashboard() {
     { name: 'UrbanKart E-Commerce', slug: 'urbankart-shop', plan: 'Enterprise', volume: '620K', numbers: 3, status: 'HEALTHY' },
     { name: 'CareFirst Healthcare', slug: 'carefirst-health', plan: 'Growth', volume: '310K', numbers: 1, status: 'HEALTHY' },
   ];
+
+  useEffect(() => {
+    adminFetch('/admin/dashboard')
+      .then((d) => {
+        if (d && typeof d.totalUsers === 'number') {
+          setStats((prev) => ({
+            ...prev,
+            ...d,
+            queueHealth: { ...prev.queueHealth, ...(d.queueHealth || {}) },
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-8 pb-10">

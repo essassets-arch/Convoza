@@ -81,10 +81,45 @@ export async function apiFetch<T = any>(path: string, init?: RequestInit): Promi
     ...((init?.headers as Record<string, string>) || {}),
   };
 
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     ...init,
     headers,
   });
+
+  // Auto-refresh expired JWT if refresh_token is available
+  if (res.status === 401 && typeof window !== 'undefined' && !path.includes('/auth/')) {
+    const refreshToken = localStorage.getItem('convoza_refresh_token');
+    if (refreshToken) {
+      const refreshRes = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => null);
+
+      if (refreshRes && refreshRes.ok) {
+        const refreshJson = await refreshRes.json().catch(() => ({}));
+        const newAccess = refreshJson?.data?.accessToken;
+        const newRefresh = refreshJson?.data?.refreshToken;
+        if (newAccess) {
+          localStorage.setItem('convoza_access_token', newAccess);
+          if (newRefresh) localStorage.setItem('convoza_refresh_token', newRefresh);
+          res = await fetch(url, {
+            ...init,
+            headers: {
+              ...getAuthHeaders(),
+              ...((init?.headers as Record<string, string>) || {}),
+            },
+          });
+        }
+      }
+    }
+
+    if (res.status === 401) {
+      localStorage.removeItem('convoza_access_token');
+      window.location.href = '/dashboard/login';
+      throw new Error('Please sign in to your CONVOZA workspace first.');
+    }
+  }
 
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.success === false) {

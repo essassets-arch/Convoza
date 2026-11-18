@@ -254,7 +254,7 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET || 'super-secret-convoza-jwt-access-token-key-2026',
-      expiresIn: '15m',
+      expiresIn: (process.env.JWT_EXPIRATION || '7d') as any,
     });
 
     const refreshToken = crypto.randomBytes(40).toString('hex');
