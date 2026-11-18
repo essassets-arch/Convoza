@@ -32,11 +32,11 @@ export default function DashboardLayout({
   }
 
   if (!authChecked) {
-    return <div className="min-h-screen bg-slate-50" />;
+    return <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />;
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
       {/* Dark Navy Sidebar with mobile drawer support */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 

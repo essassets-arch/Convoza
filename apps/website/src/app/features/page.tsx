@@ -297,7 +297,7 @@ function FeatureBox({
 
                   {/* Customer Message */}
                   <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-[11.5px] leading-relaxed text-slate-300">
-                    &ldquo;Could you confirm when order #APX-4912 will arrive?&rdquo;
+                    &ldquo;Could you confirm when order #ESS-4912 will arrive?&rdquo;
                   </div>
 
                   {/* Agent Reply */}
@@ -599,70 +599,70 @@ export default function FeaturesPage() {
     {
       feature: 'Official Meta WhatsApp Cloud API v20.0',
       convoza: true,
-      zaple: true,
+      legacyBsp: true,
       scrapers: false,
       note: 'Zero account ban risk, direct Meta server connection'
     },
     {
       feature: 'Embedded Signup (Go live in 2 minutes)',
       convoza: true,
-      zaple: true,
+      legacyBsp: true,
       scrapers: false,
       note: 'Facebook Login for Business onboarding'
     },
     {
       feature: 'Zero Message Markup (Wholesale Meta Rates)',
       convoza: true,
-      zaple: true,
+      legacyBsp: false,
       scrapers: false,
       note: 'Official conversation fees billed at pure cost'
     },
     {
       feature: '3-Column Shared Multi-Agent Inbox',
       convoza: true,
-      zaple: true,
+      legacyBsp: true,
       scrapers: false,
       note: 'Real-time WebSocket sync with private internal notes'
     },
     {
       feature: 'Strict 24-Hour Service Window Countdown',
       convoza: true,
-      zaple: true,
+      legacyBsp: true,
       scrapers: false,
       note: 'Prevents policy violations with template fallback'
     },
     {
       feature: 'High-Throughput Outbox (50+ msg/sec)',
       convoza: true,
-      zaple: false,
+      legacyBsp: false,
       scrapers: false,
       note: 'PostgreSQL SKIP LOCKED transactional queues'
     },
     {
       feature: 'Automated COD & Address Verification',
       convoza: true,
-      zaple: true,
+      legacyBsp: true,
       scrapers: false,
       note: 'Drastically cuts e-commerce Return-to-Origin'
     },
     {
       feature: 'Phone Number Masking for Support Agents',
       convoza: true,
-      zaple: true,
+      legacyBsp: true,
       scrapers: false,
       note: 'Protects proprietary customer phone numbers'
     },
     {
       feature: 'AES-256-GCM Credential Encryption',
       convoza: true,
-      zaple: false,
+      legacyBsp: false,
       scrapers: false,
       note: 'Hardware-grade cryptographic token security'
     },
     {
       feature: 'Interactive OpenAPI / Swagger Documentation',
       convoza: true,
-      zaple: false,
+      legacyBsp: false,
       scrapers: false,
       note: 'Standardized developer endpoints at /api/docs'
     }
@@ -837,7 +837,7 @@ export default function FeaturesPage() {
       </section>
 
       {/* ========================================================= */}
-      {/* 4. COMPARISON MATRIX (CONVOZA vs Zaple vs Unofficial)     */}
+      {/* 4. COMPARISON MATRIX (CONVOZA vs Legacy BSPs vs Scrapers) */}
       {/* ========================================================= */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-200">
         <div className="text-center max-w-3xl mx-auto mb-14">
@@ -864,7 +864,7 @@ export default function FeaturesPage() {
                     <span>CONVOZA (Official)</span>
                   </div>
                 </th>
-                <th className="p-5 sm:p-6 text-slate-600">Zaple.ai</th>
+                <th className="p-5 sm:p-6 text-slate-600">Legacy BSP Tools</th>
                 <th className="p-5 sm:p-6 text-rose-700">Unofficial QR Scrapers</th>
               </tr>
             </thead>
@@ -884,7 +884,7 @@ export default function FeaturesPage() {
                     </div>
                   </td>
                   <td className="p-5 sm:p-6 text-slate-600">
-                    {row.zaple ? (
+                    {row.legacyBsp ? (
                       <div className="flex items-center gap-2 text-slate-700">
                         <Check className="w-4 h-4 text-slate-500" />
                         <span>Included</span>

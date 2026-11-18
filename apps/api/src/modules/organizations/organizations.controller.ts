@@ -10,7 +10,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OrganizationsService } from './organizations.service';
-import { CreateOrganizationDto, UpdateOrganizationDto, InviteMemberDto } from './dto/organization.dto';
+import {
+  CreateOrganizationDto,
+  UpdateOrganizationDto,
+  InviteMemberDto,
+  UpdateMemberRoleDto,
+} from './dto/organization.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -39,39 +44,58 @@ export class OrganizationsController {
   @Get(':id')
   @UseGuards(TenantGuard)
   @ApiOperation({ summary: 'Get details for a specific organization' })
-  async getOrganization(@Param('id') id: string) {
-    return this.orgsService.getOrganization(id);
+  async getOrganization(@CurrentOrg() org: any) {
+    return this.orgsService.getOrganization(org.id);
   }
 
   @Patch(':id')
   @UseGuards(TenantGuard, RolesGuard)
   @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
-  @ApiOperation({ summary: 'Update organization name or branding' })
-  async updateOrganization(@Param('id') id: string, @Body() dto: UpdateOrganizationDto) {
-    return this.orgsService.updateOrganization(id, dto);
+  @ApiOperation({ summary: 'Update organization profile, GSTIN, or branding' })
+  async updateOrganization(@CurrentOrg() org: any, @Body() dto: UpdateOrganizationDto) {
+    return this.orgsService.updateOrganization(org.id, dto);
   }
 
   @Get(':id/members')
   @UseGuards(TenantGuard)
   @ApiOperation({ summary: 'List team members and pending invitations' })
-  async getMembers(@Param('id') id: string) {
-    return this.orgsService.getMembers(id);
+  async getMembers(@CurrentOrg() org: any) {
+    return this.orgsService.getMembers(org.id);
   }
 
   @Post(':id/invitations')
   @UseGuards(TenantGuard, RolesGuard)
   @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
   @ApiOperation({ summary: 'Invite a new team member to this organization' })
-  async inviteMember(@Param('id') id: string, @Body() dto: InviteMemberDto) {
-    return this.orgsService.inviteMember(id, dto);
+  async inviteMember(@CurrentOrg() org: any, @Body() dto: InviteMemberDto) {
+    return this.orgsService.inviteMember(org.id, dto);
+  }
+
+  @Delete(':id/invitations/:invitationId')
+  @UseGuards(TenantGuard, RolesGuard)
+  @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
+  @ApiOperation({ summary: 'Revoke a pending team invitation' })
+  async revokeInvitation(@CurrentOrg() org: any, @Param('invitationId') invitationId: string) {
+    return this.orgsService.revokeInvitation(org.id, invitationId);
+  }
+
+  @Patch(':id/members/:memberId')
+  @UseGuards(TenantGuard, RolesGuard)
+  @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
+  @ApiOperation({ summary: 'Update a team member role' })
+  async updateMemberRole(
+    @CurrentOrg() org: any,
+    @Param('memberId') memberId: string,
+    @Body() dto: UpdateMemberRoleDto
+  ) {
+    return this.orgsService.updateMemberRole(org.id, memberId, dto.role);
   }
 
   @Delete(':id/members/:memberId')
   @UseGuards(TenantGuard, RolesGuard)
   @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
   @ApiOperation({ summary: 'Remove a team member from this organization' })
-  async removeMember(@Param('id') id: string, @Param('memberId') memberId: string) {
-    return this.orgsService.removeMember(id, memberId);
+  async removeMember(@CurrentOrg() org: any, @Param('memberId') memberId: string) {
+    return this.orgsService.removeMember(org.id, memberId);
   }
 }
-

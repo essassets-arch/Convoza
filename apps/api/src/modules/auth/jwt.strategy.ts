@@ -9,11 +9,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'super-secret-convoza-jwt-access-token-key-2026',
+      secretOrKey: process.env.JWT_SECRET || 'dev-only-convoza-jwt-secret-not-for-prod',
     });
   }
 
-  async validate(payload: { sub: string; email: string }) {
+  async validate(payload: { sub: string; email: string; sid?: string }) {
+    if (payload.sid) {
+      const session = await this.prisma.session.findUnique({
+        where: { id: payload.sid },
+        select: { id: true, expiresAt: true },
+      });
+      if (!session || session.expiresAt < new Date()) {
+        throw new UnauthorizedException('Session has been revoked or expired');
+      }
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: {
@@ -25,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         isSuperAdmin: true,
         twoFactorEnabled: true,
         isActive: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -37,4 +48,3 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return user;
   }
 }
-

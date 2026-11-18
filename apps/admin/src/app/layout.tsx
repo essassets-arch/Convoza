@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'CONVOZA Super Admin — Platform Management',
-  description: 'Master Super Admin Management Portal',
+  title: 'CONVOZA Super Admin — Platform Control Plane',
+  description: 'Master Super Admin Control Plane operated by Emperor Smart Solutions',
   icons: {
     icon: [
       { url: '/icon.svg', type: 'image/svg+xml' },
@@ -18,14 +18,27 @@ export const metadata: Metadata = {
   },
 };
 
+const themeInitScript = `
+(function() {
+  try {
+    var stored = localStorage.getItem('convoza_theme');
+    var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="antialiased min-h-screen bg-slate-950 text-slate-100 font-sans">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="antialiased min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans">
         {children}
       </body>
     </html>

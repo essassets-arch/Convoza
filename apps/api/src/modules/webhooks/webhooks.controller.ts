@@ -5,13 +5,16 @@ import {
   Query,
   Body,
   Headers,
+  Req,
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  UnauthorizedException,
   Res,
+  RawBodyRequest,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { WebhooksService } from './webhooks.service';
 import { META_CONFIG, verifyMetaWebhookSignature, verifyRazorpaySignature } from '@convoza/configuration';
 
@@ -28,7 +31,8 @@ export class WebhooksController {
     @Query('hub.challenge') challenge: string,
     @Res() res: Response
   ) {
-    if (mode === 'subscribe' && token === META_CONFIG.WEBHOOK_VERIFY_TOKEN) {
+    const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN || META_CONFIG.WEBHOOK_VERIFY_TOKEN;
+    if (mode === 'subscribe' && token === expectedToken) {
       return res.status(HttpStatus.OK).send(challenge);
     }
     throw new ForbiddenException('Meta webhook challenge verification failed: token mismatch');
@@ -38,10 +42,17 @@ export class WebhooksController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive live WhatsApp status receipts and incoming messages' })
   async handleMetaWebhook(
+    @Req() req: RawBodyRequest<Request>,
     @Body() payload: any,
     @Headers('x-hub-signature-256') signature?: string
   ) {
-    // Note: Signature verification can be enforced in production with rawBody preservation
+    const appSecret = (process.env.META_APP_SECRET || '').trim();
+    if (appSecret && !appSecret.includes('placeholder') && req.rawBody) {
+      const valid = verifyMetaWebhookSignature(req.rawBody, signature, appSecret);
+      if (!valid) {
+        throw new UnauthorizedException('Invalid X-Hub-Signature-256 Meta webhook signature');
+      }
+    }
     return this.webhooksService.processMetaWebhook(payload);
   }
 
@@ -49,10 +60,17 @@ export class WebhooksController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive Razorpay payment and subscription webhooks' })
   async handleRazorpayWebhook(
+    @Req() req: RawBodyRequest<Request>,
     @Body() payload: any,
     @Headers('x-razorpay-signature') signature?: string
   ) {
-    return { received: true };
+    const webhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
+    if (webhookSecret && req.rawBody) {
+      const valid = verifyRazorpaySignature(req.rawBody.toString('utf8'), signature || '', webhookSecret);
+      if (!valid) {
+        throw new UnauthorizedException('Invalid X-Razorpay-Signature');
+      }
+    }
+    return this.webhooksService.processRazorpayWebhook(payload);
   }
 }
-

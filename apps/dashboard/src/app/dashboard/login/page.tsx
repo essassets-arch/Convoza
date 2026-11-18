@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { WhatsAppIcon } from '@convoza/ui';
 import { Lock, Mail, ArrowRight, AlertCircle, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { getApiBaseUrl, getWebsiteUrl } from '../../../lib/api';
+import { ThemeToggle } from '../../../components/ThemeToggle';
 
 export default function DashboardLoginPage() {
   const router = useRouter();
@@ -49,7 +50,12 @@ export default function DashboardLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* Top-Right Theme Toggle */}
+      <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50">
+        <ThemeToggle />
+      </div>
+
       <div className="max-w-md w-full mx-auto">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-[#25D366] via-emerald-600 to-[#128C7E] text-white shadow-lg shadow-emerald-500/25">
@@ -62,7 +68,7 @@ export default function DashboardLoginPage() {
             Sign in to CONVOZA
           </h1>
           <p className="mt-1.5 text-xs sm:text-sm text-slate-600">
-            Access your WhatsApp Business accounts, templates & shared inbox
+            Access your WhatsApp Business accounts, templates &amp; shared inbox
           </p>
         </div>
 
@@ -88,7 +94,7 @@ export default function DashboardLoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="alex@apexretail.com"
+                  placeholder="admin@emperorsmartsolutions.com"
                   className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium text-slate-800"
                 />
               </div>

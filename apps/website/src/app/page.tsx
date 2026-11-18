@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { WhatsAppIcon } from '../components/WhatsAppIcon';
+import { getDashboardUrl } from '../lib/api';
 import {
   MessageSquare,
   Zap,
@@ -57,6 +58,11 @@ export default function HomePage() {
   const [audienceSize, setAudienceSize] = useState<number>(10000);
   const [glowKey, setGlowKey] = useState<number>(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [dashboardUrl, setDashboardUrl] = useState<string>('/dashboard');
+
+  useEffect(() => {
+    setDashboardUrl(getDashboardUrl());
+  }, []);
 
   const handlePricingTilt = (e: React.MouseEvent<HTMLDivElement>, baseTiltY: number = 0) => {
     if (typeof window === 'undefined' || window.innerWidth < 1024) return;
@@ -377,7 +383,7 @@ export default function HomePage() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a
-                href="http://localhost:3001/dashboard"
+                href={dashboardUrl}
                 className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 text-white font-semibold text-base border border-emerald-500/40 shadow-sm transition-all transform hover:-translate-y-0.5"
               >
                 <span>View Demo</span>
@@ -603,7 +609,7 @@ export default function HomePage() {
       </section>
 
       {/* ========================================================= */}
-      {/* TRUSTED INTEGRATIONS & META BUSINESS PARTNER MARQUEE      */}
+      {/* TRUSTED INTEGRATIONS & META CLOUD API MARQUEE             */}
       {/* ========================================================= */}
       <section className="bg-white py-14 sm:py-16 border-y border-slate-200/90 relative overflow-hidden">
         
@@ -621,7 +627,7 @@ export default function HomePage() {
             <span className="text-slate-600 font-medium">Integrated with 1,000+ Platforms</span>
           </div>
 
-          {/* Official Meta Business Partner Accreditation Showcase */}
+          {/* Meta WhatsApp Cloud API Integration Showcase */}
           <div className="flex flex-col items-center justify-center">
             <div className="inline-flex items-center gap-4 sm:gap-5 px-6 sm:px-8 py-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:shadow-lg transition-all group">
               <div className="flex items-center gap-2.5">
@@ -635,12 +641,12 @@ export default function HomePage() {
               <div className="h-8 w-px bg-slate-200" />
               <div className="text-left">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold text-slate-900 tracking-tight">Official Business Partner</span>
+                  <span className="text-sm font-bold text-slate-900 tracking-tight">Built on Official Meta WhatsApp Cloud API v20.0</span>
                   <CheckCircle2 className="w-4 h-4 text-[#0064E0] fill-[#0064E0] text-white" />
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                   <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366] shrink-0" />
-                  <span>WhatsApp Cloud API Tier-4 Provider</span>
+                  <span>Independent Meta Cloud API Platform</span>
                 </div>
               </div>
             </div>
@@ -946,7 +952,7 @@ export default function HomePage() {
                       </div>
                       <span>Convoza Verified Store</span>
                       <span className="text-[9.5px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-semibold">
-                        Meta Partner
+                        Cloud API v20.0
                       </span>
                     </div>
                     <span className="text-emerald-700 font-bold flex items-center gap-1 text-[10px]">
@@ -1116,7 +1122,7 @@ export default function HomePage() {
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black uppercase tracking-wider">
-                    🛡️ Meta Tier-4
+                    🛡️ Cloud API v20.0
                   </span>
                 </div>
                 <div className="text-3xl sm:text-4xl font-black text-slate-900 font-sans tracking-tight">
@@ -1156,7 +1162,7 @@ export default function HomePage() {
               <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
               <span className="uppercase tracking-[0.18em] text-[10.5px] font-bold">Enterprise Platform Architecture</span>
               <span className="text-emerald-300">•</span>
-              <span className="text-emerald-700 font-medium">Meta Tier-4 Cloud API</span>
+              <span className="text-emerald-700 font-medium">Official Meta Cloud API v20.0</span>
             </div>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-[1.15]">
@@ -1712,7 +1718,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 2. Growth Plan (Elevated Apex Center Card) */}
+          {/* 2. Growth Plan (Elevated Featured Center Card) */}
           <div
             onMouseMove={(e) => handlePricingTilt(e, 0)}
             onMouseLeave={(e) => handlePricingReset(e, 'perspective(1000px) translateY(-24px) scale(1.04)')}
@@ -1951,7 +1957,7 @@ export default function HomePage() {
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900">Official Meta Tech Partner</h4>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900">Built on Official Meta Cloud API</h4>
                 <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">100% compliant with zero risk of bans</p>
               </div>
             </div>

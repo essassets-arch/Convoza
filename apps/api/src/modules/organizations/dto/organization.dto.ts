@@ -3,14 +3,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@convoza/shared-types';
 
 export class CreateOrganizationDto {
-  @ApiProperty({ example: 'Global Retail Corp' })
+  @ApiProperty({ example: 'Emperor Smart Solutions' })
   @IsString()
   @IsNotEmpty()
   name!: string;
 }
 
 export class UpdateOrganizationDto {
-  @ApiPropertyOptional({ example: 'Global Retail Corp Ltd' })
+  @ApiPropertyOptional({ example: 'Emperor Smart Solutions' })
   @IsOptional()
   @IsString()
   name?: string;
@@ -19,10 +19,30 @@ export class UpdateOrganizationDto {
   @IsOptional()
   @IsString()
   logoUrl?: string;
+
+  @ApiPropertyOptional({ example: 'support@emperorsmartsolutions.com' })
+  @IsOptional()
+  @IsString()
+  supportEmail?: string;
+
+  @ApiPropertyOptional({ example: 'Asia/Kolkata' })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @ApiPropertyOptional({ example: '24AAAAA0000A1Z5' })
+  @IsOptional()
+  @IsString()
+  gstin?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  billingAddress?: string;
 }
 
 export class InviteMemberDto {
-  @ApiProperty({ example: 'support.lead@company.com' })
+  @ApiProperty({ example: 'agent@emperorsmartsolutions.com' })
   @IsEmail()
   email!: string;
 
@@ -31,3 +51,8 @@ export class InviteMemberDto {
   role!: UserRole;
 }
 
+export class UpdateMemberRoleDto {
+  @ApiProperty({ enum: UserRole })
+  @IsEnum(UserRole)
+  role!: UserRole;
+}

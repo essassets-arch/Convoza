@@ -7,7 +7,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
-import { CreateCheckoutDto, VerifyPaymentDto } from './dto/billing.dto';
+import {
+  CreateCheckoutDto,
+  VerifyPaymentDto,
+  CreateWalletTopupDto,
+  VerifyWalletTopupDto,
+} from './dto/billing.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -33,6 +38,28 @@ export class BillingController {
     return this.billingService.getSubscription(org.id);
   }
 
+  @Get('wallet')
+  @ApiOperation({ summary: 'Get prepaid wallet balance, per-category rates, 30d Meta cost, and ledger' })
+  async getWallet(@CurrentOrg() org: any) {
+    return this.billingService.getWalletSummary(org.id);
+  }
+
+  @Post('wallet/topup')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
+  @ApiOperation({ summary: 'Create Razorpay order for prepaid messaging wallet top-up' })
+  async createWalletTopup(@CurrentOrg() org: any, @Body() dto: CreateWalletTopupDto) {
+    return this.billingService.createWalletTopupOrder(org.id, dto);
+  }
+
+  @Post('wallet/verify')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
+  @ApiOperation({ summary: 'Verify Razorpay wallet top-up payment signature and credit balance' })
+  async verifyWalletTopup(@CurrentOrg() org: any, @Body() dto: VerifyWalletTopupDto) {
+    return this.billingService.verifyWalletTopup(org.id, dto);
+  }
+
   @Post('checkout')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ORG_ADMIN, UserRole.ORG_OWNER)
@@ -50,15 +77,14 @@ export class BillingController {
   }
 
   @Get('invoices')
-  @ApiOperation({ summary: 'List past invoices and receipts' })
+  @ApiOperation({ summary: 'List past GST invoices and receipts' })
   async getInvoices(@CurrentOrg() org: any) {
     return this.billingService.getInvoices(org.id);
   }
 
   @Get('usage')
-  @ApiOperation({ summary: 'Get current month messaging and contact usage vs plan allowances' })
+  @ApiOperation({ summary: 'Get current month messaging, contact, WABA, and seat usage vs plan allowances' })
   async getUsage(@CurrentOrg() org: any) {
     return this.billingService.getUsage(org.id);
   }
 }
-

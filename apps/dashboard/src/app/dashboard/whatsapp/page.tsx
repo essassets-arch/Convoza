@@ -298,6 +298,7 @@ export default function WhatsAppAccountsPage() {
   };
 
   const totalPhones = accounts.reduce((acc, a) => acc + (a.phoneNumbers?.length || 0), 0);
+  const firstPhone = accounts.flatMap((a) => a.phoneNumbers || [])[0] || null;
 
   return (
     <div className="space-y-8 pb-10">
@@ -350,16 +351,31 @@ export default function WhatsAppAccountsPage() {
         <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
           <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Registered Numbers</div>
           <div className="mt-2 text-2xl font-black text-slate-900">{totalPhones} Active</div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {accounts.length} Connected WABA(s)
+          <div
+            className={`text-[11px] font-semibold mt-1 flex items-center gap-1 ${
+              accounts.length > 0 ? 'text-emerald-600' : 'text-slate-500'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${accounts.length > 0 ? 'bg-emerald-500' : 'bg-slate-400'}`}
+            />{' '}
+            {accounts.length} Connected WABA(s)
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
           <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Quality Rating</div>
-          <div className="mt-2 text-2xl font-black text-emerald-600 flex items-center gap-2">
-            <span>{accounts[0]?.phoneNumbers?.[0]?.qualityRating || 'GREEN'}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">LIVE</span>
+          <div className="mt-2 text-2xl font-black flex items-center gap-2">
+            {accounts.length > 0 && firstPhone ? (
+              <>
+                <span className="text-emerald-600">{firstPhone.qualityRating || 'GREEN'}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                  LIVE
+                </span>
+              </>
+            ) : (
+              <span className="text-slate-400">—</span>
+            )}
           </div>
           <div className="text-[11px] text-slate-500 font-medium mt-1">Official Meta Cloud API v20.0</div>
         </div>
@@ -367,7 +383,7 @@ export default function WhatsAppAccountsPage() {
         <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
           <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Messaging Limit</div>
           <div className="mt-2 text-2xl font-black text-slate-900">
-            {accounts[0]?.phoneNumbers?.[0]?.messagingLimitTier || 'TIER_1K'}
+            {accounts.length > 0 && firstPhone ? firstPhone.messagingLimitTier || 'TIER_1K' : '—'}
           </div>
           <div className="text-[11px] text-slate-500 font-medium mt-1">Unique recipients / 24 hours</div>
         </div>

@@ -9,7 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { RegisterDto, LoginDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshTokenDto, UpdateProfileDto } from './dto/auth.dto';
 import { UserRole, BillingPlanTier, SubscriptionStatus } from '@convoza/shared-types';
 
 @Injectable()
@@ -19,9 +19,14 @@ export class AuthService {
     private readonly jwtService: JwtService
   ) {}
 
+  private hashRefreshToken(raw: string): string {
+    return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
   async register(dto: RegisterDto, ipAddress?: string, userAgent?: string) {
+    const emailNorm = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase().trim() },
+      where: { email: emailNorm },
     });
 
     if (existing) {
@@ -31,28 +36,26 @@ export class AuthService {
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(dto.password, salt);
 
-    // Create unique slug for organization
-    const baseSlug = dto.organizationName
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'org';
+    const baseSlug =
+      dto.organizationName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || 'org';
     const randomSuffix = crypto.randomBytes(3).toString('hex');
     const slug = `${baseSlug}-${randomSuffix}`;
 
-    // Find default starter plan
     let starterPlan = await this.prisma.plan.findFirst({
       where: { tier: BillingPlanTier.STARTER },
     });
 
     if (!starterPlan) {
-      // Create default starter plan if not seeded yet
       starterPlan = await this.prisma.plan.create({
         data: {
           tier: BillingPlanTier.STARTER,
           name: 'Starter Plan',
-          description: 'Essential WhatsApp automation for growing teams',
-          priceMonthly: 1999, // INR 1,999
+          description: 'Essential official WhatsApp Cloud API automation for growing teams',
+          priceMonthly: 1999,
           priceYearly: 19990,
           maxWhatsAppAccounts: 1,
           maxUsers: 3,
@@ -66,14 +69,16 @@ export class AuthService {
       });
     }
 
-    // Execute atomic transaction
+    const now = new Date();
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: dto.email.toLowerCase().trim(),
+          email: emailNorm,
           passwordHash,
           name: dto.name.trim(),
           phone: dto.phone,
+          lastLoginAt: now,
+          lastLoginIp: ipAddress,
         },
       });
 
@@ -81,6 +86,7 @@ export class AuthService {
         data: {
           name: dto.organizationName.trim(),
           slug,
+          supportEmail: emailNorm,
         },
       });
 
@@ -92,7 +98,6 @@ export class AuthService {
         },
       });
 
-      // Assign trial subscription for 14 days
       const currentPeriodEnd = new Date();
       currentPeriodEnd.setDate(currentPeriodEnd.getDate() + 14);
 
@@ -108,8 +113,9 @@ export class AuthService {
       return { user, organization, membership };
     });
 
-    const tokens = await this.generateTokens(result.user.id, result.user.email);
-    await this.storeSession(result.user.id, tokens.refreshToken, ipAddress, userAgent);
+    const rawRefresh = crypto.randomBytes(40).toString('hex');
+    const session = await this.storeSession(result.user.id, rawRefresh, ipAddress, userAgent);
+    const tokens = await this.generateTokens(result.user.id, result.user.email, session.id, rawRefresh);
 
     return {
       user: {
@@ -144,8 +150,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email);
-    await this.storeSession(user.id, tokens.refreshToken, ipAddress, userAgent);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        lastLoginIp: ipAddress,
+      },
+    });
+
+    const rawRefresh = crypto.randomBytes(40).toString('hex');
+    const session = await this.storeSession(user.id, rawRefresh, ipAddress, userAgent);
+    const tokens = await this.generateTokens(user.id, user.email, session.id, rawRefresh);
 
     return {
       user: {
@@ -168,10 +183,23 @@ export class AuthService {
   }
 
   async refreshToken(dto: RefreshTokenDto, ipAddress?: string, userAgent?: string) {
-    const session = await this.prisma.session.findUnique({
-      where: { refreshToken: dto.refreshToken },
+    if (!dto.refreshToken) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
+    const hashed = this.hashRefreshToken(dto.refreshToken);
+    let session = await this.prisma.session.findUnique({
+      where: { refreshToken: hashed },
       include: { user: true },
     });
+
+    // Backwards-compatible fallback for sessions created prior to SHA-256 hashing
+    if (!session) {
+      session = await this.prisma.session.findUnique({
+        where: { refreshToken: dto.refreshToken },
+        include: { user: true },
+      });
+    }
 
     if (!session || session.expiresAt < new Date()) {
       if (session) {
@@ -184,17 +212,16 @@ export class AuthService {
       throw new UnauthorizedException('User account has been deactivated');
     }
 
-    // Token rotation: generate new token pair
-    const tokens = await this.generateTokens(session.user.id, session.user.email);
+    const newRawRefresh = crypto.randomBytes(40).toString('hex');
+    const tokens = await this.generateTokens(session.user.id, session.user.email, session.id, newRawRefresh);
 
-    // Update existing session with new refresh token and extended expiry
     const newExpiresAt = new Date();
     newExpiresAt.setDate(newExpiresAt.getDate() + 7);
 
     await this.prisma.session.update({
       where: { id: session.id },
       data: {
-        refreshToken: tokens.refreshToken,
+        refreshToken: this.hashRefreshToken(newRawRefresh),
         expiresAt: newExpiresAt,
         ipAddress: ipAddress || session.ipAddress,
         userAgent: userAgent || session.userAgent,
@@ -206,8 +233,11 @@ export class AuthService {
 
   async logout(refreshToken: string) {
     if (refreshToken) {
+      const hashed = this.hashRefreshToken(refreshToken);
       await this.prisma.session.deleteMany({
-        where: { refreshToken },
+        where: {
+          OR: [{ refreshToken: hashed }, { refreshToken }],
+        },
       });
     }
     return { loggedOut: true };
@@ -224,6 +254,7 @@ export class AuthService {
         avatarUrl: true,
         isSuperAdmin: true,
         twoFactorEnabled: true,
+        lastLoginAt: true,
         createdAt: true,
         memberships: {
           where: { isActive: true },
@@ -249,32 +280,78 @@ export class AuthService {
     return user;
   }
 
-  private async generateTokens(userId: string, email: string) {
-    const payload = { sub: userId, email };
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updateData: any = {};
+
+    if (dto.name && dto.name.trim()) {
+      updateData.name = dto.name.trim();
+    }
+    if (dto.phone !== undefined) {
+      updateData.phone = dto.phone?.trim() || null;
+    }
+    if (dto.email && dto.email.toLowerCase().trim() !== user.email) {
+      const newEmail = dto.email.toLowerCase().trim();
+      const taken = await this.prisma.user.findUnique({ where: { email: newEmail } });
+      if (taken) {
+        throw new ConflictException('That email address is already in use');
+      }
+      updateData.email = newEmail;
+    }
+
+    if (dto.newPassword) {
+      if (!dto.currentPassword) {
+        throw new BadRequestException('Current password is required to set a new password');
+      }
+      const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+      if (!valid) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+      const salt = await bcrypt.genSalt(12);
+      updateData.passwordHash = await bcrypt.hash(dto.newPassword, salt);
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        isSuperAdmin: true,
+      },
+    });
+  }
+
+  private async generateTokens(userId: string, email: string, sessionId: string, rawRefreshToken: string) {
+    const payload = { sub: userId, email, sid: sessionId };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || 'super-secret-convoza-jwt-access-token-key-2026',
-      expiresIn: (process.env.JWT_EXPIRATION || '7d') as any,
+      secret: process.env.JWT_SECRET || 'dev-only-convoza-jwt-secret-not-for-prod',
+      expiresIn: (process.env.JWT_EXPIRATION || '12h') as any,
     });
-
-    const refreshToken = crypto.randomBytes(40).toString('hex');
 
     return {
       accessToken,
-      refreshToken,
+      refreshToken: rawRefreshToken,
       tokenType: 'Bearer',
-      expiresIn: 900, // 15 mins in seconds
+      expiresIn: 43200,
     };
   }
 
-  private async storeSession(userId: string, refreshToken: string, ipAddress?: string, userAgent?: string) {
+  private async storeSession(userId: string, rawRefreshToken: string, ipAddress?: string, userAgent?: string) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await this.prisma.session.create({
+    return this.prisma.session.create({
       data: {
         userId,
-        refreshToken,
+        refreshToken: this.hashRefreshToken(rawRefreshToken),
         expiresAt,
         ipAddress,
         userAgent,
@@ -282,4 +359,3 @@ export class AuthService {
     });
   }
 }
-

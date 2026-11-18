@@ -179,7 +179,7 @@ export const Footer = () => {
               </li>
               <li>
                 <a
-                  href="http://localhost:4000/api/docs"
+                  href="/api/docs"
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
@@ -358,7 +358,7 @@ export const Footer = () => {
         </div>
 
         {/* ============================================================== */}
-        {/* Sub-Footer Bar with Official Meta Partner & Scroll to Top      */}
+        {/* Sub-Footer Bar with Cloud API Status & Scroll to Top           */}
         {/* ============================================================== */}
         <div className="pt-7 flex flex-col md:flex-row items-center justify-between text-xs text-slate-500 gap-4">
           

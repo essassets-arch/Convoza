@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, HttpStatus } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 const helmet = require('helmet');
 const compression = require('compression');
 import { AppModule } from './app.module';
@@ -10,7 +11,22 @@ import { APP_CONFIG } from '@convoza/configuration';
 
 async function bootstrap() {
   const logger = new Logger('CONVOZA-Bootstrap');
-  const app = await NestFactory.create(AppModule);
+
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+      throw new Error('FATAL: JWT_SECRET must be set to a strong secret in production.');
+    }
+    if (!process.env.CREDENTIALS_ENCRYPTION_KEY || process.env.CREDENTIALS_ENCRYPTION_KEY.length < 16) {
+      throw new Error('FATAL: CREDENTIALS_ENCRYPTION_KEY must be set in production.');
+    }
+  }
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
+
+  // Trust reverse proxy (Host Nginx + Docker Nginx) for real client IPs
+  app.set('trust proxy', 2);
 
   // Security Headers
   app.use(
@@ -19,12 +35,69 @@ async function bootstrap() {
     })
   );
 
+  // Sliding-window in-memory IP Rate Limiter (Brute-force & DDoS guard; webhooks exempt)
+  const ipBuckets = new Map<string, { count: number; resetAt: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of ipBuckets.entries()) {
+      if (v.resetAt <= now) ipBuckets.delete(k);
+    }
+  }, 60_000).unref();
+
+  app.use((req: any, res: any, next: any) => {
+    const path = req.originalUrl || req.url || '';
+    if (path.startsWith('/api/v1/webhooks') || path.startsWith('/api/v1/health')) {
+      return next();
+    }
+    const forwarded = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
+    const clientIp = forwarded || req.headers['x-real-ip'] || req.ip || 'unknown';
+    const isAuthOrPublic =
+      path.startsWith('/api/v1/auth/login') ||
+      path.startsWith('/api/v1/auth/register') ||
+      path.startsWith('/api/v1/public/');
+
+    const bucketKey = `${isAuthOrPublic ? 'strict' : 'std'}:${clientIp}`;
+    const maxReq = isAuthOrPublic ? 20 : 300;
+    const windowMs = 60_000;
+    const now = Date.now();
+
+    const entry = ipBuckets.get(bucketKey);
+    if (!entry || entry.resetAt <= now) {
+      ipBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    entry.count += 1;
+    if (entry.count > maxReq) {
+      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        success: false,
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Rate limit exceeded. Please wait a minute before retrying.',
+        },
+      });
+    }
+    return next();
+  });
+
   // Compression for high performance responses
   app.use(compression());
 
-  // CORS Configuration
+  // Strict CORS Configuration
+  const allowedOrigins = (
+    process.env.ALLOWED_ORIGINS ||
+    'https://convoza.emperorsmartsolutions.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:4000'
+  )
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: '*',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      return callback(new Error('Origin not allowed by CONVOZA CORS policy'), false);
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
@@ -50,25 +123,13 @@ async function bootstrap() {
 
   // OpenAPI / Swagger Documentation
   const config = new DocumentBuilder()
-    .setTitle('CONVOZA API')
+    .setTitle('CONVOZA API — Emperor Smart Solutions')
     .setDescription(
-      'Official WhatsApp Business Automation SaaS REST API engine. Conversations. Connected.'
+      'Official WhatsApp Business Cloud API v20.0 SaaS REST Engine by Emperor Smart Solutions.'
     )
-    .setVersion('1.0.0')
+    .setVersion('2.0.0')
     .addBearerAuth()
-    .addTag('Authentication', 'User onboarding, login, session tokens and refresh')
-    .addTag('Organizations', 'Multi-tenant organization & team management')
-    .addTag('WhatsApp Business Integration', 'Meta Cloud API onboarding, WABA connection, phone numbers')
-    .addTag('WhatsApp Message Templates', 'Template builder, dynamic variables, and Meta approval sync')
-    .addTag('Contacts & Audience Management', 'Contacts, tags, lists, CSV import, consent tracking')
-    .addTag('WhatsApp Messages', 'Individual message sending, 24h window enforcement')
-    .addTag('Bulk WhatsApp Campaigns', 'High-throughput campaign creation, scheduling, tracking')
-    .addTag('Shared WhatsApp Inbox', '3-column team inbox with Socket.IO real-time updates')
-    .addTag('Automations & Rule Engine', 'Event triggers, conditions, and automated actions')
-    .addTag('Analytics & Performance Reports', 'Dashboard metrics, time-series, and campaign analytics')
-    .addTag('Subscriptions & Billing', 'Razorpay checkout, plans, usage counters, invoices')
-    .addTag('Webhooks Ingestion', 'Meta WhatsApp & payment webhooks')
-    .addTag('Super Admin Operations', 'Platform administration and tenant management')
+    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'ApiKeyAuth')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -90,4 +151,3 @@ async function bootstrap() {
 }
 
 bootstrap();
-

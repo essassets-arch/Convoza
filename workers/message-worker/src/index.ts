@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
-import { decryptSecret, META_CONFIG, WORKER_CONFIG, buildMetaMessagePayload } from '@convoza/configuration';
+import { decryptSecret, META_CONFIG, buildMetaMessagePayload } from '@convoza/configuration';
 
 const prisma = new PrismaClient();
 let isRunning = true;
@@ -11,10 +11,10 @@ async function processMessageJob(job: any) {
   const phoneNumberId = payload.phoneNumberId;
   let recipientPhone = payload.recipientPhone;
 
-  // Retrieve phone number and credentials
   const phone = await prisma.phoneNumber.findUnique({
     where: { phoneNumberId },
     include: {
+      organization: { select: { isSuspended: true } },
       whatsappAccount: {
         include: { credentials: true },
       },
@@ -23,6 +23,10 @@ async function processMessageJob(job: any) {
 
   if (!phone || !phone.whatsappAccount) {
     throw new Error(`Phone number ${phoneNumberId} not found`);
+  }
+
+  if (phone.organization.isSuspended) {
+    throw new Error('Organization is suspended');
   }
 
   if (!recipientPhone && messageId) {
@@ -37,6 +41,10 @@ async function processMessageJob(job: any) {
     ? decryptSecret(phone.whatsappAccount.credentials.encryptedToken)
     : '';
 
+  if (!token || token.includes('placeholder') || token.includes('MetaPermanentToken')) {
+    throw new Error('Live Meta System User token is not configured for this WABA');
+  }
+
   const metaPayload = buildMetaMessagePayload({
     recipientPhone,
     type: payload.type,
@@ -49,30 +57,25 @@ async function processMessageJob(job: any) {
     templateParameters: payload.templateParameters || null,
   });
 
-  let wamid = `wamid_sim_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-
-  // In production with live Meta token, send via Meta Graph API
-  if (token && !token.includes('placeholder') && !token.includes('MetaPermanentToken')) {
-    try {
-      const response = await axios.post(
-        `${META_CONFIG.GRAPH_API_BASE}/${phoneNumberId}/messages`,
-        metaPayload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000,
-        }
-      );
-      wamid = response.data?.messages?.[0]?.id || wamid;
-    } catch (err: any) {
-      const errMsg = err.response?.data?.error?.error_user_msg || err.response?.data?.error?.message || err.message;
-      throw new Error(`Meta API error: ${errMsg}`);
-    }
+  let wamid: string | undefined;
+  try {
+    const response = await axios.post(
+      `${META_CONFIG.GRAPH_API_BASE}/${phoneNumberId}/messages`,
+      metaPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 12000,
+      }
+    );
+    wamid = response.data?.messages?.[0]?.id;
+  } catch (err: any) {
+    const errMsg = err.response?.data?.error?.error_user_msg || err.response?.data?.error?.message || err.message;
+    throw new Error(`Meta API error: ${errMsg}`);
   }
 
-  // Update message record
   await prisma.message.update({
     where: { id: messageId },
     data: {
@@ -82,7 +85,6 @@ async function processMessageJob(job: any) {
     },
   });
 
-  // Record status event
   await prisma.messageStatusEvent.create({
     data: {
       messageId,
@@ -97,7 +99,6 @@ async function runWorkerLoop() {
 
   while (isRunning) {
     try {
-      // Transactional claim using FOR UPDATE SKIP LOCKED
       const jobsToProcess = await prisma.$transaction(async (tx) => {
         const rows: any[] = await tx.$queryRaw`
           SELECT id, "organizationId", type, payload, attempts, "maxAttempts"
@@ -115,7 +116,7 @@ async function runWorkerLoop() {
         const ids = rows.map((r) => r.id);
         await tx.$executeRaw`
           UPDATE outbox_events
-          SET status = 'PROCESSING', "lockedAt" = NOW()
+          SET status = 'PROCESSING', "lockedAt" = NOW(), "lockedBy" = 'message-worker'
           WHERE id = ANY(${ids}::text[])
         `;
 
@@ -146,24 +147,22 @@ async function runWorkerLoop() {
               },
             });
 
-            // Mark message failed if dead lettered
             if (isDeadLetter && job.payload?.messageId) {
-              await prisma.message.update({
-                where: { id: job.payload.messageId },
-                data: {
-                  status: 'FAILED',
-                  errorMessage: err.message,
-                },
-              }).catch(() => {});
+              await prisma.message
+                .update({
+                  where: { id: job.payload.messageId },
+                  data: { status: 'FAILED', errorMessage: err.message },
+                })
+                .catch(() => {});
             }
           }
         }
       } else {
-        await new Promise((res) => setTimeout(res, WORKER_CONFIG.POLL_INTERVAL_MS));
+        await new Promise((res) => setTimeout(res, 6000));
       }
     } catch (loopErr) {
-      console.error('Worker loop error:', loopErr);
-      await new Promise((res) => setTimeout(res, 2000));
+      console.error('Message worker loop error:', loopErr);
+      await new Promise((res) => setTimeout(res, 5000));
     }
   }
 
@@ -175,4 +174,3 @@ process.on('SIGTERM', () => { isRunning = false; });
 process.on('SIGINT', () => { isRunning = false; });
 
 runWorkerLoop();
-

@@ -35,6 +35,8 @@ model User {
   emailVerifyToken String?
   resetToken       String?
   resetTokenExp    DateTime?
+  lastLoginAt      DateTime?
+  lastLoginIp      String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -62,36 +64,52 @@ model Session {
   @@map("sessions")
 }
 
-model Organization {
-  id                String       @id @default(uuid())
-  name              String
-  slug              String       @unique
-  logoUrl           String?
-  isSuspended       Boolean      @default(false)
-  suspensionReason  String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+enum BillingMode {
+  DIRECT_META
+  PREPAID_WALLET
+}
 
-  memberships       Membership[]
-  invitations       Invitation[]
-  subscription      Subscription?
-  usageRecords      UsageRecord[]
-  invoices          Invoice[]
-  payments          Payment[]
-  whatsAppAccounts  WhatsAppAccount[]
-  phoneNumbers      PhoneNumber[]
-  contacts          Contact[]
-  contactLists      ContactList[]
-  tags              Tag[]
-  templates         Template[]
-  campaigns         Campaign[]
-  messages          Message[]
-  conversations     Conversation[]
-  automations       AutomationRule[]
-  apiKeys           ApiKey[]
-  outboundWebhooks  OutboundWebhook[]
-  auditLogs         AuditLog[]
-  outboxEvents      OutboxEvent[]
+model Organization {
+  id                  String              @id @default(uuid())
+  name                String
+  slug                String              @unique
+  logoUrl             String?
+  supportEmail        String?
+  timezone            String              @default("Asia/Kolkata")
+  gstin               String?
+  billingAddress      String?
+  billingMode         BillingMode         @default(DIRECT_META)
+  walletBalancePaise  Int                 @default(0)
+  rateMarketingPaise  Int?
+  rateUtilityPaise    Int?
+  rateAuthPaise       Int?
+  rateServicePaise    Int?
+  isSuspended         Boolean             @default(false)
+  suspensionReason    String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  memberships         Membership[]
+  invitations         Invitation[]
+  subscription        Subscription?
+  usageRecords        UsageRecord[]
+  invoices            Invoice[]
+  payments            Payment[]
+  walletTransactions  WalletTransaction[]
+  whatsAppAccounts    WhatsAppAccount[]
+  phoneNumbers        PhoneNumber[]
+  contacts            Contact[]
+  contactLists        ContactList[]
+  tags                Tag[]
+  templates           Template[]
+  campaigns           Campaign[]
+  messages            Message[]
+  conversations       Conversation[]
+  automations         AutomationRule[]
+  apiKeys             ApiKey[]
+  outboundWebhooks    OutboundWebhook[]
+  auditLogs           AuditLog[]
+  outboxEvents        OutboxEvent[]
 
   @@map("organizations")
 }
@@ -222,6 +240,10 @@ model Invoice {
   id             String       @id @default(uuid())
   organizationId String
   amount         Int
+  subtotal       Int?
+  taxAmount      Int?
+  gstin          String?
+  description    String?
   currency       String       @default("INR")
   status         String       // PAID, PENDING, VOID
   invoiceNumber  String       @unique
@@ -233,6 +255,22 @@ model Invoice {
 
   @@index([organizationId])
   @@map("invoices")
+}
+
+model WalletTransaction {
+  id                String       @id @default(uuid())
+  organizationId    String
+  type              String       // CREDIT_TOPUP, CREDIT_ADMIN, CREDIT_REFUND, DEBIT_MESSAGE, DEBIT_ADMIN
+  amountPaise       Int
+  balanceAfterPaise Int
+  description       String
+  referenceId       String?
+  createdAt         DateTime     @default(now())
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("wallet_transactions")
 }
 
 model UsageRecord {
@@ -594,6 +632,11 @@ model Message {
   mediaType          String?
   templateId         String?
   templateParameters Json?
+  billingCategory    String?          // MARKETING, UTILITY, AUTHENTICATION, SERVICE
+  isBillable         Boolean          @default(false)
+  metaCostPaise      Int              @default(0)
+  chargedPaise       Int              @default(0)
+  walletRefunded     Boolean          @default(false)
   errorMessage       String?
   errorCode          String?
   idempotencyKey     String?          @unique
@@ -838,13 +881,29 @@ model OutboxEvent {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([status, scheduledFor])
+  @@index([status, type, scheduledFor])
   @@index([organizationId])
   @@map("outbox_events")
 }
 
 // ==========================================
-// 11. System & Audit Logs
+// 11. System, Audit Logs & Public Inquiries
 // ==========================================
+
+model ContactInquiry {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  company   String?
+  topic     String?
+  message   String
+  status    String   @default("NEW") // NEW, IN_PROGRESS, RESOLVED
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("contact_inquiries")
+}
 
 model AuditLog {
   id             String        @id @default(uuid())

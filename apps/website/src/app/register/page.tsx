@@ -115,7 +115,7 @@ export default function RegisterPage() {
           <div className="lg:col-span-5 space-y-8">
             
             <div>
-              {/* Official Meta Partner Pill */}
+              {/* Official Cloud API Pill */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-semibold mb-5 shadow-2xs">
                 <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
                 <span className="uppercase tracking-[0.16em] text-[10.5px] font-bold">Official WhatsApp Cloud API</span>
@@ -271,7 +271,7 @@ export default function RegisterPage() {
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="Alex Rivera"
+                        placeholder="Aarav Patel"
                         className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-2xs font-medium text-slate-800"
                       />
                     </div>
@@ -291,7 +291,7 @@ export default function RegisterPage() {
                         required
                         value={organizationName}
                         onChange={(e) => setOrganizationName(e.target.value)}
-                        placeholder="Apex Retail Group"
+                        placeholder="Emperor Smart Solutions"
                         className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-2xs font-medium text-slate-800"
                       />
                     </div>
@@ -313,7 +313,7 @@ export default function RegisterPage() {
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="alex@apexretail.com"
+                        placeholder="founder@emperorsmartsolutions.com"
                         className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-2xs font-medium text-slate-800"
                       />
                     </div>
@@ -332,7 +332,7 @@ export default function RegisterPage() {
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+1 (555) 019-2834"
+                        placeholder="+91 63543 51080"
                         className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-2xs font-medium text-slate-800"
                       />
                     </div>
@@ -439,10 +439,10 @@ export default function RegisterPage() {
 
             </div>
 
-            {/* Bottom Security / Partner Guarantee */}
+            {/* Bottom Security Guarantee */}
             <div className="mt-5 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium text-center">
               <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Official Meta Tech Provider Architecture • AES-256 Token Encryption • SOC2 Ready</span>
+              <span>Built on Official Meta WhatsApp Cloud API v20.0 • AES-256 Token Encryption • SOC2 Ready</span>
             </div>
 
           </div>

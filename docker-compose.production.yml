@@ -4,6 +4,7 @@ services:
     image: nginx:alpine
     container_name: convoza-nginx
     restart: always
+    mem_limit: 256m
     ports:
       - "${CONVOZA_HOST_BIND:-127.0.0.1:8090}:80"
     volumes:
@@ -21,6 +22,7 @@ services:
     image: postgres:16-alpine
     container_name: convoza-postgres
     restart: always
+    mem_limit: 2g
     environment:
       POSTGRES_USER: ${DB_USER:-convoza_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-convoza_secure_password_2026}
@@ -42,23 +44,25 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.api
     container_name: convoza-api
     restart: always
+    mem_limit: 1g
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=30"
-      JWT_SECRET: ${JWT_SECRET:-super-secret-convoza-jwt-access-token-key-2026}
-      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-super-secret-convoza-refresh-token-key-2026}
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-convoza-super-secret-master-key-32b}
+      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=20"
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
       META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v20.0}
       META_APP_ID: ${META_APP_ID:-4558736907726599}
-      META_APP_SECRET: ${META_APP_SECRET:-convoza_meta_app_secret_placeholder}
+      META_APP_SECRET: ${META_APP_SECRET:-}
       META_CONFIG_ID: ${META_CONFIG_ID:-}
       META_HOSTED_ES_URL: ${META_HOSTED_ES_URL:-}
       META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-convoza_meta_verify_token_secure_2026}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://convoza.emperorsmartsolutions.com}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_convoza_key_id}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-rzp_test_convoza_key_secret}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-convoza_razorpay_webhook_secret_2026}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://convoza.emperorsmartsolutions.com}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,10 +76,11 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.message-worker
     container_name: convoza-message-worker
     restart: always
+    mem_limit: 384m
     environment:
       NODE_ENV: production
-      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=15"
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-convoza-super-secret-master-key-32b}
+      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=5"
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
       META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v20.0}
     depends_on:
       api:
@@ -90,10 +95,11 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.campaign-worker
     container_name: convoza-campaign-worker
     restart: always
+    mem_limit: 384m
     environment:
       NODE_ENV: production
-      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=15"
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-convoza-super-secret-master-key-32b}
+      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=5"
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
       META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v20.0}
     depends_on:
       api:
@@ -108,9 +114,10 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.webhook-worker
     container_name: convoza-webhook-worker
     restart: always
+    mem_limit: 256m
     environment:
       NODE_ENV: production
-      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=15"
+      DATABASE_URL: "postgresql://${DB_USER:-convoza_user}:${DB_PASSWORD:-convoza_secure_password_2026}@postgres:5432/${DB_NAME:-convoza_db}?schema=public&connection_limit=5"
     depends_on:
       api:
         condition: service_healthy
@@ -124,6 +131,7 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.website
     container_name: convoza-website
     restart: always
+    mem_limit: 512m
     networks:
       - convoza_net
 
@@ -136,6 +144,7 @@ services:
         NEXT_PUBLIC_ASSET_PREFIX: /dashboard-assets
     container_name: convoza-dashboard
     restart: always
+    mem_limit: 512m
     networks:
       - convoza_net
 
@@ -148,6 +157,7 @@ services:
         NEXT_PUBLIC_ASSET_PREFIX: /admin-assets
     container_name: convoza-admin
     restart: always
+    mem_limit: 512m
     networks:
       - convoza_net
 

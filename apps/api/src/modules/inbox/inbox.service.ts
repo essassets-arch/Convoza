@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BillingService } from '../billing/billing.service';
 import { InboxGateway } from './inbox.gateway';
 import { decryptSecret, META_CONFIG, buildMetaMessagePayload } from '@convoza/configuration';
 import {
@@ -30,7 +31,8 @@ export class InboxService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: InboxGateway
+    private readonly gateway: InboxGateway,
+    private readonly billingService: BillingService
   ) {}
 
   async getConversations(
@@ -268,6 +270,17 @@ export class InboxService {
       }
     }
 
+    const replyCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | 'SERVICE' =
+      dto.type === MessageType.TEMPLATE && template?.category
+        ? (template.category as any)
+        : 'SERVICE';
+
+    const costEval = await this.billingService.evaluateAndDebitMessageCost(
+      organizationId,
+      replyCategory,
+      template ? `Inbox Template (${template.name})` : `Inbox 24h Service Reply`
+    );
+
     const encryptedToken = conversation.phoneNumber?.whatsappAccount?.credentials?.encryptedToken;
     const decryptedToken = encryptedToken ? decryptSecret(encryptedToken) : '';
     const hasLiveMetaToken =
@@ -304,6 +317,23 @@ export class InboxService {
         );
         liveWamid = metaRes.data?.messages?.[0]?.id;
       } catch (err: any) {
+        if (costEval.chargedPaise > 0) {
+          await this.prisma.$transaction(async (tx) => {
+            const updatedOrg = await tx.organization.update({
+              where: { id: organizationId },
+              data: { walletBalancePaise: { increment: costEval.chargedPaise } },
+            });
+            await tx.walletTransaction.create({
+              data: {
+                organizationId,
+                type: 'CREDIT_REFUND',
+                amountPaise: costEval.chargedPaise,
+                balanceAfterPaise: updatedOrg.walletBalancePaise,
+                description: `Auto-refund: Meta API rejected inbox reply`,
+              },
+            });
+          });
+        }
         const metaErrMsg =
           err.response?.data?.error?.error_user_msg ||
           err.response?.data?.error?.message ||
@@ -329,6 +359,10 @@ export class InboxService {
           body: dto.body || (template ? `[Template: ${template.name}]` : undefined),
           templateId: dto.templateId,
           templateParameters: (dto.templateParameters as any) || null,
+          billingCategory: costEval.billingCategory,
+          isBillable: costEval.isBillable,
+          metaCostPaise: costEval.metaCostPaise,
+          chargedPaise: costEval.chargedPaise,
           mediaUrl: dto.mediaUrl,
         },
       });

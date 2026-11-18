@@ -139,48 +139,50 @@ export default function ApiDocsPage() {
 
   // Code snippets by language
   const authSnippets = {
-    curl: `curl -X POST http://localhost:4000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
+    curl: `curl -X POST https://convoza.emperorsmartsolutions.com/api/v1/auth/login \\
+  -H "Content-Type: application/json" \\
   -d '{
-    "email": "alex@apexretail.com",
-    "password": "Demo@Convoza2026!"
+    "email": "admin@emperorsmartsolutions.com",
+    "password": "YourSecurePassword!"
   }'`,
     node: `import axios from 'axios';
 
-const { data } = await axios.post('http://localhost:4000/api/v1/auth/login', {
-  email: 'alex@apexretail.com',
-  password: 'Demo@Convoza2026!'
+const { data } = await axios.post('https://convoza.emperorsmartsolutions.com/api/v1/auth/login', {
+  email: 'admin@emperorsmartsolutions.com',
+  password: 'YourSecurePassword!'
 });
 
-console.log('JWT Bearer Token:', data.token);`,
+console.log('JWT Bearer Token:', data.data.tokens.accessToken);`,
     python: `import requests
 
 res = requests.post(
-    "http://localhost:4000/api/v1/auth/login",
+    "https://convoza.emperorsmartsolutions.com/api/v1/auth/login",
     json={
-        "email": "alex@apexretail.com",
-        "password": "Demo@Convoza2026!"
+        "email": "admin@emperorsmartsolutions.com",
+        "password": "YourSecurePassword!"
     }
 )
-token = res.json()["token"]
+token = res.json()["data"]["tokens"]["accessToken"]
 print("Access Token:", token)`,
-    php: `$client = new \GuzzleHttp\Client();
+    php: `$client = new \\GuzzleHttp\\Client();
 
-$res = $client->post('http://localhost:4000/api/v1/auth/login', [
+$res = $client->post('https://convoza.emperorsmartsolutions.com/api/v1/auth/login', [
     'json' => [
-        'email' => 'alex@apexretail.com',
-        'password' => 'Demo@Convoza2026!'
+        'email' => 'admin@emperorsmartsolutions.com',
+        'password' => 'YourSecurePassword!'
     ]
 ]);
 
 $data = json_decode($res->getBody(), true);
-$token = $data['token'];`
+$token = $data['data']['tokens']['accessToken'];`
   };
 
   const sendMsgSnippets = {
-    curl: `curl -X POST http://localhost:4000/api/v1/messages/send \
-  -H "Authorization: Bearer <YOUR_ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
+    curl: `# Authenticate with x-api-key: cvz_live_... OR Authorization: Bearer <JWT>
+curl -X POST https://convoza.emperorsmartsolutions.com/api/v1/messages/send \\
+  -H "x-api-key: cvz_live_9f8a7b6c5d4e3f2a1b0c" \\
+  -H "Authorization: Bearer <YOUR_ACCESS_TOKEN>" \\
+  -H "Content-Type: application/json" \\
   -d '{
     "phoneNumberId": "102938475610293",
     "recipientPhone": "+919876540001",
@@ -188,14 +190,14 @@ $token = $data['token'];`
     "templateId": "tpl_order_confirmation",
     "templateParameters": {
       "1": "Sarah",
-      "2": "APX-4912",
+      "2": "ESS-4912",
       "3": "₹2,499"
     }
   }'`,
     node: `import axios from 'axios';
 
 const response = await axios.post(
-  'http://localhost:4000/api/v1/messages/send',
+  'https://convoza.emperorsmartsolutions.com/api/v1/messages/send',
   {
     phoneNumberId: '102938475610293',
     recipientPhone: '+919876540001',
@@ -203,13 +205,13 @@ const response = await axios.post(
     templateId: 'tpl_order_confirmation',
     templateParameters: {
       1: 'Sarah',
-      2: 'APX-4912',
+      2: 'ESS-4912',
       3: '₹2,499'
     }
   },
   {
     headers: {
-      Authorization: \`Bearer \${ACCESS_TOKEN}\`
+      'x-api-key': 'cvz_live_9f8a7b6c5d4e3f2a1b0c', // or Authorization: \`Bearer \${ACCESS_TOKEN}\`
     }
   }
 );
@@ -218,7 +220,7 @@ console.log('Outbox Queue ID:', response.data.outboxQueueId);`,
     python: `import requests
 
 headers = {
-    "Authorization": f"Bearer {ACCESS_TOKEN}",
+    "x-api-key": "cvz_live_9f8a7b6c5d4e3f2a1b0c",  # or "Authorization": f"Bearer {ACCESS_TOKEN}"
     "Content-Type": "application/json"
 }
 
@@ -229,18 +231,18 @@ payload = {
     "templateId": "tpl_order_confirmation",
     "templateParameters": {
         "1": "Sarah",
-        "2": "APX-4912",
+        "2": "ESS-4912",
         "3": "₹2,499"
     }
 }
 
-res = requests.post("http://localhost:4000/api/v1/messages/send", json=payload, headers=headers)
+res = requests.post("https://convoza.emperorsmartsolutions.com/api/v1/messages/send", json=payload, headers=headers)
 print("Queued message:", res.json())`,
-    php: `$client = new \GuzzleHttp\Client();
+    php: `$client = new \\GuzzleHttp\\Client();
 
-$res = $client->post('http://localhost:4000/api/v1/messages/send', [
+$res = $client->post('https://convoza.emperorsmartsolutions.com/api/v1/messages/send', [
     'headers' => [
-        'Authorization' => 'Bearer ' . $token,
+        'x-api-key' => 'cvz_live_9f8a7b6c5d4e3f2a1b0c', // or 'Authorization' => 'Bearer ' . $token
         'Content-Type' => 'application/json'
     ],
     'json' => [
@@ -250,7 +252,7 @@ $res = $client->post('http://localhost:4000/api/v1/messages/send', [
         'templateId' => 'tpl_order_confirmation',
         'templateParameters' => [
             '1' => 'Sarah',
-            '2' => 'APX-4912',
+            '2' => 'ESS-4912',
             '3' => '₹2,499'
         ]
     ]
@@ -315,7 +317,7 @@ app.post('/webhook', (req, res) => {
               <div>
                 <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Base Endpoint URL</div>
                 <div className="font-mono text-xs sm:text-sm text-emerald-400 font-semibold break-all">
-                  http://localhost:4000/api/v1
+                  https://convoza.emperorsmartsolutions.com/api/v1
                 </div>
               </div>
             </div>
@@ -323,7 +325,7 @@ app.post('/webhook', (req, res) => {
             <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 justify-end">
               <button
                 type="button"
-                onClick={() => handleCopy('http://localhost:4000/api/v1', 'base_url')}
+                onClick={() => handleCopy('https://convoza.emperorsmartsolutions.com/api/v1', 'base_url')}
                 className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 {copiedKey === 'base_url' ? (
@@ -340,7 +342,7 @@ app.post('/webhook', (req, res) => {
               </button>
 
               <a
-                href="http://localhost:4000/api/docs"
+                href="https://convoza.emperorsmartsolutions.com/api/docs"
                 target="_blank"
                 rel="noreferrer"
                 className="px-4 py-2 bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-emerald-400 hover:to-teal-600 text-slate-950 text-xs font-black rounded-xl shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition-all transform hover:scale-[1.02]"
@@ -430,7 +432,7 @@ app.post('/webhook', (req, res) => {
                     <span>1. User & Service Account Authentication</span>
                   </h3>
                   <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed max-w-3xl">
-                    Exchange your registered CONVOZA credentials or API client credentials for a signed JWT Bearer Token. The returned token must be passed in subsequent requests within the <code className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">Authorization: Bearer &lt;TOKEN&gt;</code> header.
+                    Exchange your registered CONVOZA credentials for a signed JWT Bearer Token (<code className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">Authorization: Bearer &lt;TOKEN&gt;</code>), or pass an organization API key directly via <code className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">x-api-key: cvz_live_...</code> for server-to-server ERPs and CRMs.
                   </p>
                 </div>
 
@@ -480,13 +482,16 @@ app.post('/webhook', (req, res) => {
                     <pre className="text-xs font-mono text-slate-300 leading-relaxed overflow-x-auto p-1">
 {`{
   "success": true,
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey...",
-  "expiresIn": 86400,
-  "user": {
-    "id": "usr_99f2e18",
-    "name": "Alex Mercer",
-    "role": "ADMIN",
-    "organization": "Apex Retail Co."
+  "data": {
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.rf..."
+    },
+    "user": {
+      "id": "usr_99f2e18",
+      "email": "admin@emperorsmartsolutions.com",
+      "organization": "Emperor Smart Solutions"
+    }
   }
 }`}
                     </pre>
@@ -509,7 +514,7 @@ app.post('/webhook', (req, res) => {
                       </code>
                     </div>
                     <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Bearer Auth Required
+                      x-api-key or Bearer JWT
                     </span>
                   </div>
 
@@ -682,7 +687,7 @@ app.post('/webhook', (req, res) => {
   "templateId": "order_confirmation_v2",
   "templateParameters": {
     "1": "Sarah",
-    "2": "APX-4912",
+    "2": "ESS-4912",
     "3": "₹2,499"
   }
 }`}
@@ -870,7 +875,7 @@ app.post('/webhook', (req, res) => {
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <a
-                href="http://localhost:4000/api/docs"
+                href="https://convoza.emperorsmartsolutions.com/api/docs"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-[#25D366] via-emerald-500 to-[#128C7E] hover:from-emerald-400 hover:to-teal-600 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-100 transition-all"

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BillingService } from '../billing/billing.service';
 import { SendIndividualMessageDto } from './dto/message.dto';
 import { normalizeE164 } from '@convoza/validation';
 import { decryptSecret, META_CONFIG, buildMetaMessagePayload } from '@convoza/configuration';
@@ -23,7 +24,10 @@ import {
 export class MessagesService {
   private readonly logger = new Logger(MessagesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billingService: BillingService
+  ) {}
 
   async sendMessage(organizationId: string, dto: SendIndividualMessageDto) {
     // 1. Validate sending phone number
@@ -140,7 +144,19 @@ export class MessagesService {
       }
     }
 
-    // 7. If live Meta WABA credentials are configured, dispatch immediately via Meta Cloud API v20.0
+    // 7. Evaluate Meta wholesale cost & debit Prepaid Wallet if org uses PREPAID_WALLET
+    const msgCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | 'SERVICE' =
+      dto.type === MessageType.TEMPLATE && template?.category
+        ? (template.category as any)
+        : 'SERVICE';
+
+    const costEval = await this.billingService.evaluateAndDebitMessageCost(
+      organizationId,
+      msgCategory,
+      template ? `Template (${template.name}) to ${recipientPhone}` : `Message to ${recipientPhone}`
+    );
+
+    // 8. If live Meta WABA credentials are configured, dispatch immediately via Meta Cloud API v20.0
     const encryptedToken = senderPhone.whatsappAccount.credentials?.encryptedToken;
     const decryptedToken = encryptedToken ? decryptSecret(encryptedToken) : '';
     const hasLiveMetaToken =
@@ -177,6 +193,24 @@ export class MessagesService {
         );
         liveWamid = metaRes.data?.messages?.[0]?.id;
       } catch (err: any) {
+        // Refund wallet immediately if synchronous Meta call failed
+        if (costEval.chargedPaise > 0) {
+          await this.prisma.$transaction(async (tx) => {
+            const updatedOrg = await tx.organization.update({
+              where: { id: organizationId },
+              data: { walletBalancePaise: { increment: costEval.chargedPaise } },
+            });
+            await tx.walletTransaction.create({
+              data: {
+                organizationId,
+                type: 'CREDIT_REFUND',
+                amountPaise: costEval.chargedPaise,
+                balanceAfterPaise: updatedOrg.walletBalancePaise,
+                description: `Auto-refund: Meta API rejected dispatch to ${recipientPhone}`,
+              },
+            });
+          });
+        }
         const metaErrMsg =
           err.response?.data?.error?.error_user_msg ||
           err.response?.data?.error?.message ||
@@ -186,7 +220,7 @@ export class MessagesService {
       }
     }
 
-    // 8. Atomic transaction: record message (+ outbox event if queued asynchronously)
+    // 9. Atomic transaction: record message (+ outbox event if queued asynchronously)
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
       const message = await tx.message.create({
@@ -203,6 +237,10 @@ export class MessagesService {
           body: dto.body || (template ? `[Template: ${template.name}]` : undefined),
           templateId: dto.templateId,
           templateParameters: (dto.templateParameters as any) || null,
+          billingCategory: costEval.billingCategory,
+          isBillable: costEval.isBillable,
+          metaCostPaise: costEval.metaCostPaise,
+          chargedPaise: costEval.chargedPaise,
           mediaUrl: dto.mediaUrl,
           mediaType: dto.mediaType,
           idempotencyKey: dto.idempotencyKey,

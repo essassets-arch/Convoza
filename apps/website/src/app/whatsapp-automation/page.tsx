@@ -139,7 +139,7 @@ export default function WhatsAppAutomationPage() {
       },
       actionYes: {
         title: 'Dynamic ERP Tracking Card Dispatched',
-        preview: 'Your order #APX-4912 is out for delivery with Bluedart (Tracking: #BD9821). Expected today before 5 PM! 📦',
+        preview: 'Your order #ESS-4912 is out for delivery with Bluedart (Tracking: #BD9821). Expected today before 5 PM! 📦',
         tag: 'AUTO RESOLVE',
       },
       actionNo: {

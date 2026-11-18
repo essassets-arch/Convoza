@@ -80,6 +80,7 @@ export default function TemplatesPage() {
 
   const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedWabaId, setSelectedWabaId] = useState<string>('');
+  const [orgName, setOrgName] = useState('Emperor Smart Solutions');
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -100,7 +101,7 @@ export default function TemplatesPage() {
   >([{ type: 'QUICK_REPLY', text: 'Track Shipment' }]);
 
   const [sampleVariables, setSampleVariables] = useState<Record<string, string>>({
-    '1': 'Alex',
+    '1': 'Customer',
     '2': 'ORD-4912',
   });
 
@@ -111,6 +112,10 @@ export default function TemplatesPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      if (typeof window !== 'undefined') {
+        const storedOrg = localStorage.getItem('convoza_org_name');
+        if (storedOrg) setOrgName(storedOrg);
+      }
       const [accRes, tplRes] = await Promise.all([
         apiFetch<any[]>('/whatsapp/accounts').catch(() => []),
         apiFetch<{ items: any[] }>('/templates?limit=100').catch(() => ({ items: [] })),
@@ -293,6 +298,9 @@ export default function TemplatesPage() {
   });
 
   const bodyVarTokens = Array.from(new Set(bodyText.match(/\{\{(\d+)\}\}/g) || []));
+
+  const selectedAccount = accounts.find((a) => a.id === selectedWabaId) || accounts[0];
+  const selectedAccountPhone = selectedAccount?.phoneNumbers?.[0];
 
   const previewBody =
     category === 'AUTHENTICATION'
@@ -714,6 +722,7 @@ export default function TemplatesPage() {
             </div>
 
             <WhatsAppChatMockup
+              businessName={selectedAccountPhone?.verifiedName || selectedAccount?.name || orgName}
               headerType={category === 'AUTHENTICATION' ? undefined : headerType === 'NONE' ? undefined : 'TEXT'}
               headerText={
                 category === 'AUTHENTICATION'

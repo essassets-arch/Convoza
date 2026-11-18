@@ -12,6 +12,41 @@ export function getAdminApiBaseUrl(): string {
   return 'http://localhost:4000/api/v1';
 }
 
+export function getUserDashboardUrl(): string {
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if (port === '3002') {
+      return `${protocol}//${hostname}:3001/dashboard`;
+    }
+  }
+  return '/dashboard';
+}
+
+export async function adminLogout(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const accessToken = localStorage.getItem('convoza_admin_access_token') || '';
+  const refreshToken = localStorage.getItem('convoza_admin_refresh_token') || '';
+
+  try {
+    if (accessToken || refreshToken) {
+      await fetch(`${getAdminApiBaseUrl()}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+    }
+  } catch {
+    // Proceed to clear client session even if network call fails
+  } finally {
+    localStorage.removeItem('convoza_admin_access_token');
+    localStorage.removeItem('convoza_admin_refresh_token');
+    localStorage.removeItem('convoza_admin_user');
+  }
+}
+
 export async function adminFetch<T = any>(path: string, init?: RequestInit): Promise<T> {
   const token =
     typeof window !== 'undefined' ? localStorage.getItem('convoza_admin_access_token') || '' : '';
@@ -31,6 +66,7 @@ export async function adminFetch<T = any>(path: string, init?: RequestInit): Pro
   if (res.status === 401 || res.status === 403) {
     if (typeof window !== 'undefined' && !path.includes('/auth/login')) {
       localStorage.removeItem('convoza_admin_access_token');
+      localStorage.removeItem('convoza_admin_refresh_token');
       localStorage.removeItem('convoza_admin_user');
       window.location.replace('/admin/login');
     }

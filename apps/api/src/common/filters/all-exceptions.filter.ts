@@ -18,8 +18,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code = 'INTERNAL_SERVER_ERROR';
-    let message = 'An unexpected error occurred';
-    let details: any = null;
+    let message = 'An unexpected internal error occurred. Please try again.';
+    let details: any = undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -27,13 +27,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (typeof res === 'string') {
         message = res;
       } else if (typeof res === 'object') {
-        message = res.message || message;
+        message = Array.isArray(res.message) ? res.message.join('; ') : res.message || message;
         code = res.error || code;
         details = res.details || (Array.isArray(res.message) ? res.message : undefined);
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       this.logger.error(`Unhandled Exception: ${exception.message}`, exception.stack);
+      if (process.env.NODE_ENV !== 'production') {
+        message = exception.message;
+      }
     }
 
     response.status(status).json({
@@ -41,7 +43,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error: {
         code,
         message,
-        details,
+        ...(details !== undefined ? { details } : {}),
       },
       meta: {
         timestamp: new Date().toISOString(),
@@ -49,4 +51,3 @@ export class AllExceptionsFilter implements ExceptionFilter {
     });
   }
 }
-

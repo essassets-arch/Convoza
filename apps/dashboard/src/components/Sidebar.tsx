@@ -18,8 +18,6 @@ import {
   CreditCard,
   Settings,
   ShieldCheck,
-  ChevronRight,
-  Sparkles,
   X,
 } from 'lucide-react';
 
@@ -31,40 +29,6 @@ interface NavItem {
   badgeColor?: string;
 }
 
-const navSections: { title: string; items: NavItem[] }[] = [
-  {
-    title: 'OVERVIEW',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'WhatsApp Numbers', href: '/dashboard/whatsapp', icon: Smartphone, badge: 'Live', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-    ],
-  },
-  {
-    title: 'BROADCAST & INBOX',
-    items: [
-      { name: 'Shared Team Inbox', href: '/dashboard/inbox', icon: Inbox, badge: '2 Open', badgeColor: 'bg-emerald-500 text-slate-950 font-bold' },
-      { name: 'Bulk Campaigns', href: '/dashboard/campaigns', icon: Flame, badge: 'Active', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-      { name: 'Single Message', href: '/dashboard/messages', icon: Send },
-      { name: 'Template Builder', href: '/dashboard/templates', icon: FileCode2, badge: 'Meta Sync', badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
-      { name: 'Contacts & Lists', href: '/dashboard/contacts', icon: Users2 },
-    ],
-  },
-  {
-    title: 'AUTOMATION & DATA',
-    items: [
-      { name: 'Automations & Bots', href: '/dashboard/automations', icon: Bot },
-      { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
-    ],
-  },
-  {
-    title: 'ORGANIZATION',
-    items: [
-      { name: 'Billing & Quota', href: '/dashboard/billing', icon: CreditCard, badge: 'Growth', badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
-      { name: 'Team & API Settings', href: '/dashboard/settings', icon: Settings },
-    ],
-  },
-];
-
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
@@ -73,31 +37,121 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState('Workspace');
-  const [phoneDisplay, setPhoneDisplay] = useState('Not Connected');
+  const [hasConnectedPhone, setHasConnectedPhone] = useState(false);
+  const [connectedCount, setConnectedCount] = useState(0);
+  const [phoneDisplay, setPhoneDisplay] = useState('No Active Number');
   const [phoneTier, setPhoneTier] = useState('Connect Official WABA');
+  const [openConversations, setOpenConversations] = useState(0);
+  const [activeCampaigns, setActiveCampaigns] = useState(0);
+  const [planTier, setPlanTier] = useState<string>('');
 
   useEffect(() => {
     try {
       const storedOrg = localStorage.getItem('convoza_org_name');
       if (storedOrg) setOrgName(storedOrg);
       const token = localStorage.getItem('convoza_access_token');
-      if (token) {
-        apiFetch<any[]>('/whatsapp/accounts')
-          .then((accounts) => {
-            const list = Array.isArray(accounts) ? accounts : [];
-            const p = list.flatMap((a: any) => a?.phoneNumbers || [])[0];
-            if (p) {
-              setPhoneDisplay(p.displayPhoneNumber);
-              setPhoneTier(`Meta ${p.messagingLimitTier || 'TIER_1K'} (${p.qualityRating || 'GREEN'})`);
-            } else {
-              setPhoneDisplay('No Active Number');
-              setPhoneTier('Connect Official WABA');
-            }
-          })
-          .catch(() => {});
-      }
+      if (!token) return;
+
+      Promise.allSettled([
+        apiFetch<any[]>('/whatsapp/accounts'),
+        apiFetch<any>('/analytics/dashboard'),
+        apiFetch<any>('/billing/usage'),
+      ]).then(([accOutcome, dashOutcome, usageOutcome]) => {
+        if (accOutcome.status === 'fulfilled') {
+          const list = Array.isArray(accOutcome.value) ? accOutcome.value : [];
+          const phones = list.flatMap((a: any) => a?.phoneNumbers || []);
+          setConnectedCount(phones.length);
+          const p = phones[0];
+          if (p) {
+            setHasConnectedPhone(true);
+            setPhoneDisplay(p.displayPhoneNumber);
+            setPhoneTier(`Meta ${p.messagingLimitTier || 'TIER_1K'} (${p.qualityRating || 'GREEN'})`);
+          } else {
+            setHasConnectedPhone(false);
+            setPhoneDisplay('No Active Number');
+            setPhoneTier('Connect Official WABA');
+          }
+        }
+
+        if (dashOutcome.status === 'fulfilled' && dashOutcome.value) {
+          const d = dashOutcome.value;
+          setOpenConversations(Number(d.openConversations ?? 0));
+          setActiveCampaigns(Number(d.activeCampaigns ?? 0));
+        }
+
+        if (usageOutcome.status === 'fulfilled' && usageOutcome.value) {
+          const u = usageOutcome.value;
+          if (u.tier) {
+            setPlanTier(String(u.tier).toUpperCase());
+          }
+        }
+      });
     } catch {}
   }, [pathname]);
+
+  const navSections: { title: string; items: NavItem[] }[] = [
+    {
+      title: 'OVERVIEW',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        {
+          name: 'WhatsApp Numbers',
+          href: '/dashboard/whatsapp',
+          icon: Smartphone,
+          badge: connectedCount > 0 ? `${connectedCount} Live` : undefined,
+          badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        },
+      ],
+    },
+    {
+      title: 'BROADCAST & INBOX',
+      items: [
+        {
+          name: 'Shared Team Inbox',
+          href: '/dashboard/inbox',
+          icon: Inbox,
+          badge: openConversations > 0 ? `${openConversations} Open` : undefined,
+          badgeColor: 'bg-emerald-500 text-slate-950 font-bold border-emerald-400',
+        },
+        {
+          name: 'Bulk Campaigns',
+          href: '/dashboard/campaigns',
+          icon: Flame,
+          badge: activeCampaigns > 0 ? `${activeCampaigns} Active` : undefined,
+          badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+        },
+        { name: 'Single Message', href: '/dashboard/messages', icon: Send },
+        {
+          name: 'Template Builder',
+          href: '/dashboard/templates',
+          icon: FileCode2,
+          badge: 'Meta Sync',
+          badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+        },
+        { name: 'Contacts & Lists', href: '/dashboard/contacts', icon: Users2 },
+      ],
+    },
+    {
+      title: 'AUTOMATION & DATA',
+      items: [
+        { name: 'Automations & Bots', href: '/dashboard/automations', icon: Bot },
+        { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
+      ],
+    },
+    {
+      title: 'ORGANIZATION',
+      items: [
+        {
+          name: 'Billing & Quota',
+          href: '/dashboard/billing',
+          icon: CreditCard,
+          badge: planTier || undefined,
+          badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+        },
+        { name: 'Team & API Settings', href: '/dashboard/settings', icon: Settings },
+      ],
+    },
+  ];
 
   return (
     <>
@@ -199,21 +253,42 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
         {/* Footer Info & Quality Tier Pill */}
         <div className="p-3.5 border-t border-slate-800/80 bg-slate-950/80 space-y-2">
-          <div className="flex items-center justify-between text-xs bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <div className="leading-none">
-                <span className="text-[11px] font-bold text-slate-200 block">{phoneDisplay}</span>
-                <span className="text-[9px] text-emerald-400 font-medium">{phoneTier}</span>
+          <Link
+            href="/dashboard/whatsapp"
+            onClick={onClose}
+            className="flex items-center justify-between text-xs bg-slate-900/90 hover:bg-slate-900 border border-slate-800 rounded-xl p-2.5 transition-colors"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  hasConnectedPhone ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                }`}
+              />
+              <div className="leading-none min-w-0">
+                <span className="text-[11px] font-bold text-slate-200 block truncate">{phoneDisplay}</span>
+                <span
+                  className={`text-[9px] font-medium block mt-0.5 truncate ${
+                    hasConnectedPhone ? 'text-emerald-400' : 'text-slate-400'
+                  }`}
+                >
+                  {phoneTier}
+                </span>
               </div>
             </div>
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          </div>
+            <ShieldCheck
+              className={`w-4 h-4 shrink-0 ${hasConnectedPhone ? 'text-emerald-400' : 'text-slate-500'}`}
+            />
+          </Link>
 
           <div className="flex items-center justify-between px-1 text-[10px] text-slate-500">
-            <span>Meta Cloud API v20.0</span>
+            <span>Cloud API v20.0 • Live</span>
             <span className="text-emerald-400/80 flex items-center gap-1 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> 99.99% Up
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  hasConnectedPhone ? 'bg-emerald-400' : 'bg-slate-500'
+                }`}
+              />
+              {hasConnectedPhone ? 'Connected' : 'Standby'}
             </span>
           </div>
         </div>

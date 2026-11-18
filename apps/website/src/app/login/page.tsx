@@ -52,7 +52,7 @@ export default function LoginPage() {
         localStorage.setItem('convoza_org_name', primaryOrg.name);
       }
 
-      // Redirect to Dashboard (with cross-port token handoff when on localhost:3000)
+      // Redirect to Dashboard (with cross-port token handoff in local dev)
       window.location.href = buildDashboardRedirectUrl({
         accessToken: json.data.tokens.accessToken,
         refreshToken: json.data.tokens.refreshToken,
@@ -121,7 +121,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="alex@apexretail.com"
+                  placeholder="founder@emperorsmartsolutions.com"
                   className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-2xs font-medium text-slate-800"
                 />
               </div>

@@ -72,6 +72,7 @@ export default function IndividualMessagePage() {
   const [phones, setPhones] = useState<SenderPhoneOption[]>([]);
   const [templates, setTemplates] = useState<ApprovedTemplateOption[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(true);
+  const [orgName, setOrgName] = useState('Emperor Smart Solutions');
 
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('+91');
@@ -89,6 +90,15 @@ export default function IndividualMessagePage() {
   );
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedOrg = localStorage.getItem('convoza_org_name');
+      if (storedOrg) setOrgName(storedOrg);
+      const qPhone = new URLSearchParams(window.location.search).get('phone');
+      if (qPhone && qPhone.trim()) {
+        setRecipientPhone(qPhone.trim());
+      }
+    }
+
     async function fetchAssets() {
       setLoadingAssets(true);
       try {
@@ -121,7 +131,7 @@ export default function IndividualMessagePage() {
           if (parsedTpls[0].category === 'AUTHENTICATION') {
             setParamValues({ '1': '482913' });
           } else {
-            setParamValues({ '1': 'Alex', '2': '3' });
+            setParamValues({ '1': 'Customer', '2': 'ORD-1024' });
           }
         }
       } finally {
@@ -131,6 +141,7 @@ export default function IndividualMessagePage() {
     fetchAssets();
   }, []);
 
+  const selectedPhone = phones.find((p) => p.phoneNumberId === phoneNumberId) || phones[0];
   const activeTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
 
   const renderedTemplateBody = activeTemplate
@@ -264,7 +275,7 @@ export default function IndividualMessagePage() {
                   required
                   value={recipientPhone}
                   onChange={(e) => setRecipientPhone(e.target.value)}
-                  placeholder="+919876543210"
+                  placeholder="+919000000000"
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 text-xs font-mono text-slate-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
@@ -456,6 +467,7 @@ export default function IndividualMessagePage() {
           </div>
 
           <WhatsAppChatMockup
+            businessName={selectedPhone?.verifiedName || orgName}
             headerType={messageType === 'TEMPLATE' && activeTemplate?.headerText ? 'TEXT' : undefined}
             headerText={
               messageType === 'TEMPLATE' && activeTemplate?.headerText

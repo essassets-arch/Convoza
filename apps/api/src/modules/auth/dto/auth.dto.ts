@@ -2,7 +2,7 @@ import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-vali
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
-  @ApiProperty({ example: 'john@acmeretail.com' })
+  @ApiProperty({ example: 'founder@emperorsmartsolutions.com' })
   @IsEmail()
   email!: string;
 
@@ -11,24 +11,24 @@ export class RegisterDto {
   @MinLength(8)
   password!: string;
 
-  @ApiProperty({ example: 'John Doe' })
+  @ApiProperty({ example: 'Karan' })
   @IsString()
   @IsNotEmpty()
   name!: string;
 
-  @ApiProperty({ example: 'Acme Retail' })
+  @ApiProperty({ example: 'Emperor Smart Solutions' })
   @IsString()
   @IsNotEmpty()
   organizationName!: string;
 
-  @ApiPropertyOptional({ example: '+919876543210' })
+  @ApiPropertyOptional({ example: '+918306767847' })
   @IsOptional()
   @IsString()
   phone?: string;
 }
 
 export class LoginDto {
-  @ApiProperty({ example: 'john@acmeretail.com' })
+  @ApiProperty({ example: 'founder@emperorsmartsolutions.com' })
   @IsEmail()
   email!: string;
 
@@ -43,10 +43,38 @@ export class LoginDto {
 }
 
 export class RefreshTokenDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  refreshToken!: string;
+  refreshToken?: string;
+}
+
+export class UpdateProfileDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currentPassword?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  newPassword?: string;
 }
 
 export class ForgotPasswordDto {
@@ -65,4 +93,3 @@ export class ResetPasswordDto {
   @MinLength(8)
   newPassword!: string;
 }
-

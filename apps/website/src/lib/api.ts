@@ -12,6 +12,17 @@ export function getApiBaseUrl(): string {
   return 'http://localhost:4000/api/v1';
 }
 
+export function getDashboardUrl(): string {
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port, origin } = window.location;
+    if (port === '3000') {
+      return `${protocol}//${hostname}:3001/dashboard`;
+    }
+    return `${origin}/dashboard`;
+  }
+  return '/dashboard';
+}
+
 export function buildDashboardRedirectUrl(authPayload: {
   accessToken: string;
   refreshToken: string;

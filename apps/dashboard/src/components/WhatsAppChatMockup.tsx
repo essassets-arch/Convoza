@@ -43,16 +43,24 @@ export const WhatsAppChatMockup: React.FC<WhatsAppChatMockupProps> = ({
   buttons = [],
   variables = {},
   time = '10:14 AM',
-  businessName = 'Apex Retail Official',
+  businessName = 'Emperor Smart Solutions',
   verified = true,
 }) => {
-  // Replace tokens like {{1}}, {{2}} with dynamic variables
   const renderText = (str?: string) => {
     if (!str) return '';
     return str.replace(/\{\{(\d+)\}\}/g, (match, p1) => {
       return variables[p1] !== undefined && variables[p1] !== '' ? variables[p1] : match;
     });
   };
+
+  const initials =
+    (businessName || 'Emperor Smart Solutions')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() || '')
+      .join('') || 'ES';
 
   return (
     <div className="w-full max-w-[340px] mx-auto bg-slate-900 rounded-[2.5rem] p-3 shadow-2xl border-4 border-slate-800 font-sans relative">
@@ -69,14 +77,14 @@ export const WhatsAppChatMockup: React.FC<WhatsAppChatMockupProps> = ({
           <div className="flex items-center gap-2">
             <ArrowLeft className="w-4 h-4 text-emerald-200 cursor-pointer" />
             <div className="w-8 h-8 rounded-full bg-emerald-700 border border-emerald-500/40 flex items-center justify-center font-bold text-xs text-white shadow-sm shrink-0">
-              AR
+              {initials}
             </div>
             <div className="leading-tight truncate max-w-[130px]">
               <div className="flex items-center gap-1">
                 <span className="text-xs font-bold text-white truncate">{businessName}</span>
                 {verified && (
                   <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                   </svg>
                 )}
               </div>
@@ -92,14 +100,7 @@ export const WhatsAppChatMockup: React.FC<WhatsAppChatMockupProps> = ({
         </div>
 
         {/* WhatsApp Chat Wallpaper Area */}
-        <div
-          className="flex-1 overflow-y-auto p-3 flex flex-col justify-end space-y-2"
-          style={{
-            backgroundImage: `radial-gradient(#d3c9bf 1px, transparent 1px)`,
-            backgroundSize: '16px 16px',
-            backgroundColor: '#ECE5DD',
-          }}
-        >
+        <div className="flex-1 overflow-y-auto p-3 flex flex-col justify-end space-y-2 wa-chat-canvas">
           {/* Encryption Notice */}
           <div className="mx-auto bg-amber-50/90 text-amber-900 border border-amber-200/80 rounded-lg px-2.5 py-1 text-[10px] text-center max-w-[240px] shadow-sm leading-tight flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
@@ -107,7 +108,7 @@ export const WhatsAppChatMockup: React.FC<WhatsAppChatMockupProps> = ({
           </div>
 
           {/* WhatsApp Chat Message Bubble */}
-          <div className="bg-white rounded-2xl rounded-tr-none shadow-md overflow-hidden text-slate-800 text-xs max-w-[92%] ml-auto border border-emerald-900/10">
+          <div className="wa-bubble-out bg-white rounded-2xl rounded-tr-none shadow-md overflow-hidden text-slate-800 text-xs max-w-[92%] ml-auto border border-emerald-900/10">
             {/* Header Preview */}
             {headerType === 'IMAGE' && (
               <div className="h-32 bg-slate-200 flex flex-col items-center justify-center text-slate-400 relative overflow-hidden">
@@ -135,7 +136,7 @@ export const WhatsAppChatMockup: React.FC<WhatsAppChatMockupProps> = ({
                   <FileText className="w-4 h-4" />
                 </div>
                 <div className="truncate">
-                  <span className="text-[11px] font-bold text-slate-800 block truncate">Invoice_APX_2026.pdf</span>
+                  <span className="text-[11px] font-bold text-slate-800 block truncate">Document_Attachment.pdf</span>
                   <span className="text-[9px] text-slate-400">PDF Document • 240 KB</span>
                 </div>
               </div>

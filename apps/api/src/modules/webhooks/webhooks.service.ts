@@ -1,13 +1,12 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InboxGateway } from '../inbox/inbox.gateway';
 import { AutomationsService } from '../automations/automations.service';
+import { BillingService } from '../billing/billing.service';
 import {
   MessageStatus,
   MessageDirection,
   MessageType,
-  JobType,
-  JobStatus,
   AutomationTrigger,
   ConversationStatus,
 } from '@convoza/shared-types';
@@ -19,8 +18,15 @@ export class WebhooksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inboxGateway: InboxGateway,
-    private readonly automationsService: AutomationsService
+    private readonly automationsService: AutomationsService,
+    private readonly billingService: BillingService
   ) {}
+
+  async processRazorpayWebhook(payload: any) {
+    const event = payload?.event || '';
+    this.logger.log(`Razorpay webhook received: ${event}`);
+    return { received: true };
+  }
 
   /**
    * Handle incoming Meta WhatsApp Cloud API Webhook payload
@@ -38,7 +44,7 @@ export class WebhooksService {
         const val = change.value;
         if (!val) continue;
 
-        // 1. Process Message Status Updates (sent, delivered, read, failed)
+        // 1. Process Message Status Updates (sent, delivered, read, failed + Meta pricing)
         if (val.statuses && Array.isArray(val.statuses)) {
           for (const statusObj of val.statuses) {
             await this.handleStatusEvent(statusObj);
@@ -47,7 +53,7 @@ export class WebhooksService {
 
         // 2. Process Incoming Messages
         if (val.messages && Array.isArray(val.messages)) {
-          const metadata = val.metadata; // contains phone_number_id, display_phone_number
+          const metadata = val.metadata;
           for (const messageObj of val.messages) {
             await this.handleIncomingMessage(metadata, messageObj, val.contacts);
           }
@@ -61,12 +67,16 @@ export class WebhooksService {
           }
         }
 
-        // 3. Process Template Approval / Status Updates from Meta
+        // 3. Process Template Status Updates
         if (change.field === 'message_template_status_update' && val.message_template_id) {
-          await this.handleTemplateStatusUpdate(String(val.message_template_id), val.event, val.reason);
+          await this.handleTemplateStatusUpdate(
+            String(val.message_template_id),
+            val.event,
+            val.reason
+          );
         }
 
-        // 4. Process Tech Provider Embedded Signup Account Updates
+        // 4. Process WABA Account Updates (Embedded Signup / Quality / Tier)
         if (change.field === 'account_update') {
           this.logger.log(
             `Meta Tech Provider account_update event received: event=${val.event || 'UNKNOWN'}, waba=${val.waba_info?.waba_id || entry.id}`
@@ -80,6 +90,7 @@ export class WebhooksService {
 
   private async handleStatusEvent(statusObj: any) {
     const wamid = statusObj.id;
+    if (!wamid) return;
     const statusStr = statusObj.status?.toUpperCase();
 
     let newStatus = MessageStatus.SENT;
@@ -111,12 +122,34 @@ export class WebhooksService {
       updateData.errorCode = String(statusObj.errors[0]?.code || '');
     }
 
-    const updated = await this.prisma.message.update({
+    // Reconcile exact Meta Wholesale Cost from Meta's webhook pricing object
+    if (statusObj.pricing) {
+      const rawCat = String(statusObj.pricing.category || '').toUpperCase();
+      const mappedCat: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | 'SERVICE' =
+        rawCat === 'MARKETING'
+          ? 'MARKETING'
+          : rawCat === 'AUTHENTICATION'
+          ? 'AUTHENTICATION'
+          : rawCat === 'UTILITY'
+          ? 'UTILITY'
+          : 'SERVICE';
+      const billable = Boolean(statusObj.pricing.billable);
+      const rates = await this.billingService.getRateCard(message.organizationId);
+      updateData.billingCategory = mappedCat;
+      updateData.isBillable = billable;
+      updateData.metaCostPaise = billable ? rates.metaWholesalePaise[mappedCat] ?? 0 : 0;
+    }
+
+    await this.prisma.message.update({
       where: { id: message.id },
       data: updateData,
     });
 
-    // Record status event history
+    // Auto-refund tenant prepaid wallet if Meta reports FAILED
+    if (newStatus === MessageStatus.FAILED) {
+      await this.billingService.refundFailedMessageIfCharged(message.id);
+    }
+
     await this.prisma.messageStatusEvent.create({
       data: {
         messageId: message.id,
@@ -126,7 +159,6 @@ export class WebhooksService {
       },
     });
 
-    // Notify real-time clients
     this.inboxGateway.broadcastMessageStatus(message.organizationId, {
       messageId: message.id,
       conversationId: message.conversationId,
@@ -139,9 +171,18 @@ export class WebhooksService {
     const phoneNumberId = metadata?.phone_number_id;
     if (!phoneNumberId) return;
 
-    // Resolve phone number record to find organization
+    // Idempotency guard against Meta webhook retries
+    if (messageObj?.id) {
+      const duplicate = await this.prisma.message.findUnique({
+        where: { wamid: messageObj.id },
+        select: { id: true },
+      });
+      if (duplicate) return;
+    }
+
     const phoneRecord = await this.prisma.phoneNumber.findUnique({
       where: { phoneNumberId },
+      include: { organization: { select: { id: true, isSuspended: true } } },
     });
 
     if (!phoneRecord) {
@@ -149,34 +190,42 @@ export class WebhooksService {
       return;
     }
 
+    if (phoneRecord.organization?.isSuspended) {
+      this.logger.warn(`Dropping inbound webhook for suspended organization: ${phoneRecord.organizationId}`);
+      return;
+    }
+
     const orgId = phoneRecord.organizationId;
-    const senderPhone = '+' + messageObj.from.replace(/[^\d]/g, '');
+    const senderPhone = '+' + String(messageObj.from || '').replace(/[^\d]/g, '');
     const contactProfileName = contactsArr?.[0]?.profile?.name || '';
 
-    // Find or create Contact
-    const contact = await this.prisma.contact.upsert({
+    const existingContact = await this.prisma.contact.findUnique({
       where: {
         organizationId_phone: {
           organizationId: orgId,
           phone: senderPhone,
         },
       },
-      create: {
-        organizationId: orgId,
-        phone: senderPhone,
-        name: contactProfileName || undefined,
-        consentStatus: 'OPTED_IN',
-        consentSource: 'WHATSAPP_INBOUND',
-      },
-      update: {
-        ...(contactProfileName && { name: contactProfileName }),
-      },
     });
 
-    // 24-hour customer window resets on inbound customer message!
+    const isNewContact = !existingContact;
+    const contact = existingContact
+      ? await this.prisma.contact.update({
+          where: { id: existingContact.id },
+          data: { ...(contactProfileName && !existingContact.name ? { name: contactProfileName } : {}) },
+        })
+      : await this.prisma.contact.create({
+          data: {
+            organizationId: orgId,
+            phone: senderPhone,
+            name: contactProfileName || undefined,
+            consentStatus: 'OPTED_IN',
+            consentSource: 'WHATSAPP_INBOUND',
+          },
+        });
+
     const windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // Extract message body and type
     let body = '';
     let msgType = MessageType.TEXT;
     let mediaUrl: string | undefined;
@@ -193,10 +242,18 @@ export class WebhooksService {
     } else if (['image', 'video', 'document', 'audio'].includes(messageObj.type)) {
       body = messageObj[messageObj.type]?.caption || `[${messageObj.type.toUpperCase()}]`;
       msgType = messageObj.type.toUpperCase() as MessageType;
-      mediaUrl = messageObj[messageObj.type]?.id; // Meta media ID
+      mediaUrl = messageObj[messageObj.type]?.id;
     }
 
-    // Find or create Conversation
+    // Auto opt-out compliance when customer texts STOP / UNSUBSCRIBE
+    const upperTrim = body.trim().toUpperCase();
+    if (upperTrim === 'STOP' || upperTrim === 'UNSUBSCRIBE') {
+      await this.prisma.contact.update({
+        where: { id: contact.id },
+        data: { consentStatus: 'OPTED_OUT' },
+      });
+    }
+
     const conversation = await this.prisma.conversation.upsert({
       where: {
         organizationId_phoneNumberId_contactId: {
@@ -224,7 +281,6 @@ export class WebhooksService {
       },
     });
 
-    // Create Message record
     const message = await this.prisma.message.create({
       data: {
         organizationId: orgId,
@@ -237,11 +293,14 @@ export class WebhooksService {
         wamid: messageObj.id,
         body,
         mediaUrl,
+        billingCategory: 'SERVICE',
+        isBillable: false,
+        metaCostPaise: 0,
+        chargedPaise: 0,
         deliveredAt: new Date(),
       },
     });
 
-    // Broadcast new message & conversation update to shared inbox real-time room
     this.inboxGateway.broadcastNewMessage(orgId, {
       ...message,
       contact: {
@@ -262,15 +321,27 @@ export class WebhooksService {
       },
     });
 
-    // Trigger rule-based automations asynchronously
+    const autoCtx = {
+      contactId: contact.id,
+      contactPhone: contact.phone,
+      conversationId: conversation.id,
+      phoneNumberId,
+      messageText: body,
+    };
+
+    if (isNewContact) {
+      this.automationsService
+        .evaluateRules(orgId, AutomationTrigger.NEW_CONTACT, autoCtx)
+        .catch((err) => this.logger.error(`NEW_CONTACT automation failed: ${err.message}`));
+    }
+
     this.automationsService
-      .evaluateRules(orgId, AutomationTrigger.INCOMING_MESSAGE, {
-        contactId: contact.id,
-        conversationId: conversation.id,
-        phoneNumberId,
-        messageText: body,
-      })
-      .catch((err) => this.logger.error(`Automation trigger failed: ${err.message}`));
+      .evaluateRules(orgId, AutomationTrigger.INCOMING_MESSAGE, autoCtx)
+      .catch((err) => this.logger.error(`INCOMING_MESSAGE automation failed: ${err.message}`));
+
+    this.automationsService
+      .evaluateRules(orgId, AutomationTrigger.KEYWORD_DETECTED, autoCtx)
+      .catch((err) => this.logger.error(`KEYWORD_DETECTED automation failed: ${err.message}`));
   }
 
   private async handleTemplateStatusUpdate(metaTemplateId: string, event?: string, reason?: string) {
@@ -291,17 +362,15 @@ export class WebhooksService {
     this.logger.log(`Template ${metaTemplateId} status updated via Meta webhook -> ${mappedStatus}`);
   }
 
-  /**
-   * Handle WhatsApp Business App Coexistence outbound message echoes (smb_message_echoes)
-   */
   private async handleMessageEcho(metadata: any, echoObj: any) {
     const phoneNumberId = metadata?.phone_number_id;
     if (!phoneNumberId || !echoObj?.to) return;
 
     const phoneRecord = await this.prisma.phoneNumber.findUnique({
       where: { phoneNumberId },
+      include: { organization: { select: { isSuspended: true } } },
     });
-    if (!phoneRecord) return;
+    if (!phoneRecord || phoneRecord.organization?.isSuspended) return;
 
     const orgId = phoneRecord.organizationId;
     const recipientPhone = '+' + String(echoObj.to).replace(/[^\d]/g, '');
@@ -361,6 +430,8 @@ export class WebhooksService {
         status: MessageStatus.SENT,
         wamid: echoObj.id,
         body,
+        billingCategory: 'SERVICE',
+        isBillable: false,
         sentAt: new Date(),
       },
     });
@@ -372,4 +443,3 @@ export class WebhooksService {
     });
   }
 }
-

@@ -680,14 +680,7 @@ export default function SharedInboxPage() {
           </div>
 
           {/* WhatsApp Background Chat Stream */}
-          <div
-            className="flex-1 overflow-y-auto p-6 space-y-4"
-            style={{
-              backgroundImage: `radial-gradient(#d3c9bf 1px, transparent 1px)`,
-              backgroundSize: '16px 16px',
-              backgroundColor: '#ECE5DD',
-            }}
-          >
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 wa-chat-canvas">
             <div className="mx-auto bg-amber-50/90 text-amber-900 border border-amber-200/80 rounded-xl px-3 py-1.5 text-[11px] text-center max-w-sm shadow-xs leading-relaxed flex items-center justify-center gap-2">
               <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0" />
               <span>Live Official Meta WhatsApp Cloud API Stream</span>
@@ -720,8 +713,8 @@ export default function SharedInboxPage() {
                   <div
                     className={`max-w-md px-4 py-3 rounded-2xl shadow-sm text-xs sm:text-sm leading-relaxed ${
                       isOut
-                        ? 'bg-[#E7FFDB] text-slate-900 rounded-tr-none border border-emerald-900/10'
-                        : 'bg-white text-slate-900 rounded-tl-none border border-slate-200/80'
+                        ? 'wa-bubble-out bg-[#E7FFDB] text-slate-900 rounded-tr-none border border-emerald-900/10'
+                        : 'wa-bubble-in bg-white text-slate-900 rounded-tl-none border border-slate-200/80'
                     }`}
                   >
                     {m.type === 'TEMPLATE' && (

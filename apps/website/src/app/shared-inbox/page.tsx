@@ -84,7 +84,7 @@ export default function SharedInboxPage() {
       id: 1,
       name: 'Sarah Miller',
       phone: '+91 •••• ••0001',
-      preview: 'Could you confirm when order #APX-4912 will arrive?',
+      preview: 'Could you confirm when order #ESS-4912 will arrive?',
       time: '2m ago',
       unread: 1,
       tag: 'VIP Customer',

@@ -545,7 +545,7 @@ export default function PricingPage() {
                 </div>
               </div>
 
-              {/* 2. GROWTH PLAN (ELEVATED APEX CENTER CARD) */}
+              {/* 2. GROWTH PLAN (ELEVATED FEATURED CENTER CARD) */}
               <div
                 onMouseMove={(e) => handlePricingTilt(e, 0)}
                 onMouseLeave={(e) => handlePricingReset(e, 'perspective(1000px) translateY(-24px) scale(1.04)')}

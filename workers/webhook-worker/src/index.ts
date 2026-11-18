@@ -1,15 +1,12 @@
 import { PrismaClient } from '@prisma/client';
-import { WORKER_CONFIG } from '@convoza/configuration';
 
 const prisma = new PrismaClient();
 let isRunning = true;
 
 async function processWebhookJob(job: any) {
   const payload = job.payload as any;
-  const eventType = payload.eventType; // 'DELIVERY_STATUS', 'INCOMING_MESSAGE', 'TEMPLATE_STATUS'
-
-  if (eventType === 'DELIVERY_STATUS' && payload.wamid) {
-    const status = payload.status; // 'DELIVERED', 'READ', 'FAILED'
+  if (payload?.eventType === 'DELIVERY_STATUS' && payload.wamid) {
+    const status = payload.status;
     const message = await prisma.message.findUnique({
       where: { wamid: payload.wamid },
     });
@@ -23,21 +20,12 @@ async function processWebhookJob(job: any) {
           ...(status === 'READ' && { readAt: new Date() }),
         },
       });
-
-      await prisma.messageStatusEvent.create({
-        data: {
-          messageId: message.id,
-          status,
-          timestamp: new Date(),
-          rawPayload: payload,
-        },
-      });
     }
   }
 }
 
 async function runWebhookWorker() {
-  console.log('CONVOZA Webhook Worker started (asynchronous ingestion worker)...');
+  console.log('CONVOZA Webhook Reconciliation Worker started...');
 
   while (isRunning) {
     try {
@@ -58,7 +46,7 @@ async function runWebhookWorker() {
         const ids = rows.map((r) => r.id);
         await tx.$executeRaw`
           UPDATE outbox_events
-          SET status = 'PROCESSING', "lockedAt" = NOW()
+          SET status = 'PROCESSING', "lockedAt" = NOW(), "lockedBy" = 'webhook-worker'
           WHERE id = ANY(${ids}::text[])
         `;
 
@@ -74,22 +62,24 @@ async function runWebhookWorker() {
               data: { status: 'COMPLETED' },
             });
           } catch (err: any) {
+            const nextAttempt = job.attempts + 1;
             await prisma.outboxEvent.update({
               where: { id: job.id },
               data: {
-                attempts: job.attempts + 1,
+                attempts: nextAttempt,
                 lastError: err.message,
-                status: job.attempts >= 5 ? 'DEAD_LETTER' : 'PENDING',
+                status: nextAttempt >= 5 ? 'DEAD_LETTER' : 'PENDING',
+                scheduledFor: new Date(Date.now() + Math.pow(2, nextAttempt) * 2000),
               },
             });
           }
         }
       } else {
-        await new Promise((res) => setTimeout(res, WORKER_CONFIG.POLL_INTERVAL_MS));
+        await new Promise((res) => setTimeout(res, 10000));
       }
     } catch (err) {
       console.error('Webhook worker error:', err);
-      await new Promise((res) => setTimeout(res, 2000));
+      await new Promise((res) => setTimeout(res, 5000));
     }
   }
 
@@ -101,4 +91,3 @@ process.on('SIGTERM', () => { isRunning = false; });
 process.on('SIGINT', () => { isRunning = false; });
 
 runWebhookWorker();
-

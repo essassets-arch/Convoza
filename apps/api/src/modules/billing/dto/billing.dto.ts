@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsString, IsEnum, IsOptional } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsEnum, IsNumber, Min, Max } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { BillingInterval } from '@convoza/shared-types';
 
 export class CreateCheckoutDto {
@@ -39,3 +39,27 @@ export class VerifyPaymentDto {
   interval!: BillingInterval;
 }
 
+export class CreateWalletTopupDto {
+  @ApiProperty({ example: 1000, description: 'Wallet top-up credit amount in INR (₹100 to ₹500,000)' })
+  @IsNumber()
+  @Min(100)
+  @Max(500000)
+  amountInr!: number;
+}
+
+export class VerifyWalletTopupDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  razorpayOrderId!: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  razorpayPaymentId!: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  razorpaySignature!: string;
+}
