@@ -105,15 +105,12 @@ async function bootstrap() {
   // Global API Prefix
   app.setGlobalPrefix('api/v1');
 
-  // Global Validation Pipe
+  // Global Validation Pipe (explicit conversion only — preserves nested JSON objects/arrays intact)
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: false,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
     })
   );
 
